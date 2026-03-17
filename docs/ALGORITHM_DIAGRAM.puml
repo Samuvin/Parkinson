@@ -1,0 +1,66 @@
+@startuml Algorithm_Diagram
+title Detect Parkinson or Not | SE-ResNet 1D + Attention Fusion + Dense Classifier
+
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 11
+skinparam ArrowColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+
+start
+
+: Goal: Detect if person has Parkinson's or not;
+
+: INPUT - Feature numbers from speech, handwriting, gait;
+note right
+  SPEECH: 22 numbers
+  pitch, jitter, shimmer, voice stability
+
+  HANDWRITING: 10 numbers
+  pressure, tremor, fluency, stroke pattern
+
+  GAIT: 10 numbers
+  stride, speed, regularity, asymmetry
+
+  These numbers are the input to detection.
+end note
+
+: 1. SE-ResNet 1D CNN - Learn patterns;
+note right
+  One encoder per modality: 1D conv + residual + SE blocks.
+  Learns patterns: shaky voice, tremors, uneven strokes,
+  irregular gait, slow speed.
+  Patterns that can indicate Parkinson's.
+end note
+
+: 2. Attention Fusion - Weight modalities;
+note right
+  Learns which modality to trust more for this person.
+  More weight on speech, or handwriting, or gait
+  depending on where the signal is strongest.
+  Then combines into one representation for detection.
+end note
+
+: 3. Dense classifier - Binary decision;
+note right
+  PARKINSON: when patterns show tremor, slowness, irregularity
+  (shaky voice, tremulous writing, uneven walk).
+
+  NOT PARKINSON (Healthy): when patterns are normal
+  (steady voice, smooth writing, regular walk).
+
+  Output: one of two classes with confidence.
+end note
+
+: OUTPUT - Detection result;
+note right
+  Parkinson's detected - e.g. 92 percent confidence
+  or Not Parkinson (Healthy) - e.g. 88 percent confidence.
+
+  In short: numbers in -> detect Parkinson or not -> result out.
+end note
+
+stop
+
+@enduml

@@ -1,0 +1,98 @@
+@startuml User_Workflow
+title User Workflow - Detect Parkinson or Not (Login to Result)
+
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 11
+skinparam ArrowColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+
+start
+
+:User opens the application;
+
+:User logs in (register if new);
+
+:Goal: Detect if person has Parkinson or not;
+
+:User goes to upload or predict screen;
+
+if (What does the user do?) then (Upload new data)
+  :User chooses what to upload;
+  note right
+    SPEECH - audio file (voice recording)
+    -> we extract 22 numbers: pitch, jitter, shimmer, voice stability
+
+    HANDWRITING - image (spiral or sentence)
+    -> we extract 10 numbers: pressure, tremor, fluency, stroke pattern
+
+    GAIT - video (person walking)
+    -> we extract 10 numbers: stride, speed, regularity, asymmetry
+
+    Or COMBINED - one video for all three.
+    These numbers are the input to detection.
+  end note
+  :User selects a file from device;
+  :User clicks Upload;
+  :System checks file (type, size);
+  if (File OK?) then (yes)
+    :System extracts features from the file;
+    note right
+      SPEECH: 22 numbers
+      pitch, jitter, shimmer, voice stability
+
+      HANDWRITING: 10 numbers
+      pressure, tremor, fluency, stroke pattern
+
+      GAIT: 10 numbers
+      stride, speed, regularity, asymmetry
+
+      These numbers are the input to detection.
+    end note
+    :User sees Features extracted successfully;
+  else (no)
+    :User sees error message (e.g. wrong file type or too large);
+    stop
+  endif
+else (Already has features or uses examples)
+  :User enters or uses extracted features;
+endif
+
+:User clicks Predict or Get result;
+
+:System runs the model to detect Parkinson or not;
+note right
+  1. SE-ResNet 1D CNN - Learn patterns
+  One encoder per modality. Learns: shaky voice, tremors,
+  uneven strokes, irregular gait, slow speed.
+  Patterns that can indicate Parkinson's.
+
+  2. Attention Fusion - Weight modalities
+  Learns which modality to trust more for this person.
+  More weight on speech, or handwriting, or gait.
+  Then combines into one representation for detection.
+
+  3. Dense classifier - Binary decision
+  PARKINSON: when patterns show tremor, slowness, irregularity
+  (shaky voice, tremulous writing, uneven walk).
+  NOT PARKINSON (Healthy): when patterns are normal
+  (steady voice, smooth writing, regular walk).
+  Output: one of two classes with confidence.
+end note
+
+:System produces detection result;
+
+:User sees the detection result on screen;
+note right
+  Parkinson's detected - e.g. 92 percent confidence
+  or Not Parkinson (Healthy) - e.g. 88 percent confidence.
+
+  In short: numbers in -> detect Parkinson or not -> result out.
+end note
+
+:User can log out or do another detection;
+
+stop
+
+@enduml

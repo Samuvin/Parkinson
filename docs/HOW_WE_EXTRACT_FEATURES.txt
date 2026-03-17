@@ -1,0 +1,515 @@
+================================================================================
+PARKINSON'S DISEASE PREDICTION SYSTEM
+HOW WE EXTRACT FEATURES — IN PLAIN LANGUAGE
+(Easy-to-understand version)
+================================================================================
+
+This document explains HOW we get the numbers (features) from your uploaded
+video, image, or audio. It is written so that anyone can understand the
+process without needing a technical background.
+
+--------------------------------------------------------------------------------
+WHAT THIS DOCUMENT COVERS
+--------------------------------------------------------------------------------
+
+  Part 1 — How we get 10 numbers from a WALKING VIDEO (gait)
+  Part 2 — How we get 10 numbers from a HANDWRITING IMAGE
+  Part 3 — How we get 22 numbers from VOICE / AUDIO
+  Part 4 — What happens when you upload ONE VIDEO and ask for everything
+
+--------------------------------------------------------------------------------
+BIG PICTURE
+--------------------------------------------------------------------------------
+
+  We never store your raw video or image for the prediction. We only turn it
+  into a list of numbers (features). Those numbers describe things like: how
+  regular the walking is, how smooth the handwriting is, how stable the voice
+  is. The model then uses these numbers to give a result.
+
+================================================================================
+PART 1 — HOW WE EXTRACT GAIT FROM A WALKING VIDEO
+================================================================================
+
+  What you give us: A video of someone walking (e.g. toward the camera or
+  across the room).
+
+  What we give back: 10 numbers that describe how they walk (stride timing,
+  speed, regularity, left–right balance).
+
+  We do NOT use special equipment like force plates or motion-capture suits.
+  We only use the video itself: we look at how the picture changes from one
+  moment to the next and use that to estimate walking pattern.
+
+--------------------------------------------------------------------------------
+Step 1 — Open the video and get ready
+--------------------------------------------------------------------------------
+
+  We open the video file and read how many images per second it has (called
+  “frame rate”). If the file doesn’t say, we assume 30 images per second. We
+  only look at the first 300 images (about 10 seconds) so processing stays
+  fast.
+
+  In simple terms: We treat the video as a stack of still photos. We need
+  to know how many photos per second so we can turn “image number” into
+  “seconds” when we measure time.
+
+--------------------------------------------------------------------------------
+Step 2 — See “how much moved” in each moment
+--------------------------------------------------------------------------------
+
+  For each image in the video we do this:
+
+    1. Turn the image into black-and-white. Colour isn’t needed to see
+       movement.
+
+    2. Slightly blur the image. That hides tiny changes (like camera shake
+       or skin detail) so we mainly see big movement (body, legs).
+
+    3. Compare this image with the one before it. Where the picture changed
+       a lot, we treat it as “moved.” We then count: what fraction of the
+       image changed? That fraction (between 0 and 1) is our “motion amount”
+       for that moment.
+
+  We do this for every pair of images that follow each other. So we get a
+  list of numbers: one number per moment, saying “how much of the scene
+  moved” at that time.
+
+  We also remember how bright each image is on average. Later, if the
+  brightness jumps around a lot (e.g. camera moving or shaking), we can
+  adjust our numbers a bit to reflect possible unsteadiness.
+
+  In simple terms: Like putting two photos side by side and marking what
+  changed. Lots of change = lots of motion (e.g. leg swinging). Little
+  change = less motion (e.g. foot on ground). We turn that into one number
+  per moment.
+
+--------------------------------------------------------------------------------
+Step 3 — Find when each “step” happens
+--------------------------------------------------------------------------------
+
+  Walking has a rhythm: step, step, step. In our list of “motion amount”
+  numbers, that often shows up as peaks—moments when the motion is higher
+  (e.g. when the foot swings or hits the ground).
+
+  We smooth the list a little (mix each value with its neighbours) so tiny
+  bumps don’t count as steps. Then we look for peaks: a moment that is
+  higher than the moment before and the moment after, and also above a
+  certain level. We also make sure we don’t count two peaks that are too
+  close together (so one step isn’t counted twice).
+
+  Result: we get a list of when we think a step happened (as image numbers;
+  we can turn those into seconds using images per second).
+
+  In simple terms: We find the “beats” of the walk. Each beat is one step.
+  From that we can measure timing and rhythm.
+
+--------------------------------------------------------------------------------
+Step 4 — Stride interval and its variation
+--------------------------------------------------------------------------------
+
+  One stride = one left step + one right step (one full cycle of both legs).
+  The time for one stride is “stride interval.” We get the time between
+  consecutive steps from our step list and how many images per second we
+  have, then double it (two steps = one stride) and average. That gives
+  stride_interval.
+
+  How much that time varies from stride to stride (steady vs all over the
+  place) gives us “stride_interval_std.” If the person walks very slowly
+  (very little motion in the video), we nudge the stride interval a bit
+  longer; if they walk fast (lots of motion), we nudge it a bit shorter.
+
+  In simple terms: We measure how long each stride takes and whether that
+  time is the same every time or changes a lot.
+
+--------------------------------------------------------------------------------
+Step 5 — Swing time and stance time
+--------------------------------------------------------------------------------
+
+  When the foot is in the air we call that “swing.” When it’s on the ground
+  we call that “stance.” We can’t see the foot directly in a simple video,
+  so we use our motion numbers. We take the middle value of all motion
+  amounts as a split point. Images with motion below that we treat as more
+  “foot in the air”; images above as more “foot on ground.” We count how
+  many images fall in each group, convert to time using images per second,
+  and divide by the number of steps to get average swing time and stance
+  time per step.
+
+  In simple terms: We split the walk into “foot in the air” vs “foot on
+  ground” using how much the image moves in each moment.
+
+--------------------------------------------------------------------------------
+Step 6 — Double support time
+--------------------------------------------------------------------------------
+
+  “Double support” is the short time when both feet are on the ground
+  (between steps). We estimate it from stance time and how much our motion
+  numbers jump around. More jumpy motion can mean longer double support.
+
+  In simple terms: We get a number that reflects how long both feet are on
+  the ground at once.
+
+--------------------------------------------------------------------------------
+Step 7 — Cadence and gait speed
+--------------------------------------------------------------------------------
+
+  Cadence = steps per minute. We count how many steps we found in the
+  video, divide by the length of the video in seconds, and multiply by 60.
+  We then adjust a bit using how strong the motion was, and we keep the
+  result in a realistic range (e.g. 70–150 steps per minute).
+
+  Gait speed = how fast the person is moving (distance per second). We
+  don’t know real distance from the video, so we guess a step length from
+  how strong the motion is, then: (number of steps × guessed step length) ÷
+  video length. That gives us a speed value we can use.
+
+  In simple terms: We get “how many steps per minute” and “how fast they’re
+  walking” from the step count and video length.
+
+--------------------------------------------------------------------------------
+Step 8 — Step length (the feature)
+--------------------------------------------------------------------------------
+
+  From speed and cadence we can work backwards to get an average step
+  length: speed ÷ (steps per second). If we don’t have cadence, we use a
+  simple guess from how strong the motion is.
+
+  In simple terms: One number that represents how long each step is (on
+  average), in distance.
+
+--------------------------------------------------------------------------------
+Step 9 — Stride regularity
+--------------------------------------------------------------------------------
+
+  We look at how consistent our “motion amount” numbers are. If they’re very
+  similar from moment to moment, the walk is regular; if they jump around a
+  lot, it’s irregular. We turn that into a single number between 0 and 1
+  (higher = more regular). We keep it in a sensible range.
+
+  In simple terms: One number that says how steady and even the walking
+  pattern is.
+
+--------------------------------------------------------------------------------
+Step 10 — Gait asymmetry
+--------------------------------------------------------------------------------
+
+  We split our motion list into the first half of the video and the second
+  half. We take the average motion in each half. If the two averages are
+  different, the walk is somewhat “asymmetric” (e.g. one side or one part
+  of the walk stronger than the other). We turn that difference into a
+  number in a fixed range (e.g. 0.05–0.35).
+
+  In simple terms: One number that says whether the walk is even on both
+  sides or uneven.
+
+--------------------------------------------------------------------------------
+Step 11 — Final tweaks from the video
+--------------------------------------------------------------------------------
+
+  If the overall motion in the video is very low, we slightly reduce speed,
+  cadence, and regularity (so we don’t overestimate). If the brightness of
+  the images changes a lot (possible shaking or unsteadiness), we slightly
+  increase stride variation and asymmetry. Then we return all 10 numbers.
+
+  In simple terms: We adjust the numbers a little so they better match what
+  we actually see in the video.
+
+================================================================================
+PART 2 — HOW WE EXTRACT HANDWRITING FROM AN IMAGE
+================================================================================
+
+  What you give us: One image of handwriting or a drawing (e.g. a sentence,
+  a spiral).
+
+  What we give back: 10 numbers that describe the writing (pressure, speed
+  estimate, tremor, fluency, etc.).
+
+  We do NOT use a special pen or tablet that records pressure and time. We
+  only have a single photo. So we estimate everything from the shape and
+  thickness of the strokes in the image.
+
+--------------------------------------------------------------------------------
+Step 1 — Load the image and separate writing from background
+--------------------------------------------------------------------------------
+
+  We load the image and convert it to black and white. Then we choose a
+  cutoff so that the written strokes become white and the rest (paper)
+  becomes black. We use a method that picks the cutoff automatically from
+  the image (so we don’t have to set it by hand). Now we have an image with
+  only two colours: white for writing, black for background.
+
+  In simple terms: We turn the photo into “writing = white, rest = black”
+  so we can measure the writing alone.
+
+--------------------------------------------------------------------------------
+Step 2 — Pressure (from stroke thickness)
+--------------------------------------------------------------------------------
+
+  We can’t measure real pen pressure from a photo, but thicker strokes
+  usually mean more pressure. So we measure how thick the strokes are.
+
+  For each point on a stroke, we find how far we are from the nearest edge
+  of the stroke (how far “inside” the stroke we are). That distance (times
+  two) is like the width of the stroke at that point. We collect these
+  widths for the whole image. The average width (scaled to a number we use)
+  becomes “mean pressure”; how much the width varies (thin in some places,
+  thick in others) becomes “std pressure.”
+
+  In simple terms: Thick strokes → higher pressure number; thin strokes →
+  lower. We also measure how much the thickness changes from place to place.
+
+--------------------------------------------------------------------------------
+Step 3 — Smoothness (and from it, velocity and acceleration)
+--------------------------------------------------------------------------------
+
+  Smooth, flowing writing tends to have gentle curves. Jerky or shaky writing
+  has more sharp turns. We take the outline of the main stroke(s) and look
+  at how much the direction changes from point to point. Lots of sharp turns
+  = low smoothness; gentle curves = high smoothness.
+
+  We then turn smoothness into estimates of “how fast” and “how smoothly
+  the pen moved”: higher smoothness → higher mean velocity and mean
+  acceleration; we also get a measure of how much that varies (std
+  velocity). These are not real speed in cm per second, but numbers that
+  the model can use.
+
+  In simple terms: We look at how curvy or jagged the lines are. Smoother
+  lines → we assume faster, more fluent writing and set the velocity and
+  acceleration numbers higher.
+
+--------------------------------------------------------------------------------
+Step 4 — Pen-up time (gaps between strokes)
+--------------------------------------------------------------------------------
+
+  When you lift the pen, there’s a gap between strokes. We slightly thicken
+  the strokes in the image so that strokes that are very close together
+  join into one blob. Then we count how many separate blobs of writing there
+  are. More blobs = more pen lifts = more time with the pen in the air. We
+  turn that into a “pen-up” ratio and then into a “pen_up_time” feature.
+
+  In simple terms: We count how many separate strokes there are. Many
+  separate strokes → more time with the pen off the paper.
+
+--------------------------------------------------------------------------------
+Step 5 — Stroke length and writing tempo
+--------------------------------------------------------------------------------
+
+  We count how many dots (pixels) are part of the writing (total stroke
+  length). We divide by 1000 to get a manageable number. For “writing
+  tempo,” we use the opposite of pen-up: less pen-up → higher tempo (more
+  continuous writing).
+
+  In simple terms: One number is “how much writing” is on the page; the
+  other is “how continuous” the writing is (tempo).
+
+--------------------------------------------------------------------------------
+Step 6 — Tremor (wobble in the line)
+--------------------------------------------------------------------------------
+
+  Tremor often shows up as small wiggles in the stroke. We thin the stroke
+  down to a single line right through the middle (like a backbone). Then
+  we fit a straight line through that middle line. The real stroke wanders
+  away from that straight line; we measure how much it wanders to the side.
+  A wiggly stroke has high “wander”; a straight stroke has low. We turn that
+  into a tremor score and then into a “tremor_frequency” number (in a range
+  like 5–8, so the model can use it).
+
+  In simple terms: We see how much the written line wobbles away from a
+  straight line. More wobble → higher tremor number.
+
+--------------------------------------------------------------------------------
+Step 7 — Fluency score
+--------------------------------------------------------------------------------
+
+  We combine smoothness and tremor: high smoothness and low tremor → high
+  fluency; low smoothness or high tremor → lower fluency. If the strokes
+  are long and continuous (few, long outlines), we add a small bonus. We
+  keep the result between 0 and 1.
+
+  In simple terms: One overall number for “how smooth and fluent” the
+  writing looks (0 = not fluent, 1 = very fluent).
+
+  After this we return all 10 handwriting numbers.
+
+================================================================================
+PART 3 — HOW WE EXTRACT VOICE FROM AUDIO
+================================================================================
+
+  What you give us: An audio file (e.g. WAV, MP3) of someone speaking, or we
+  take the sound track from a video.
+
+  What we give back: 22 numbers that describe the voice (pitch, stability,
+  noise, and some “pattern” measures).
+
+  We use voice analysis software (Praat, via a library called Parselmouth)
+  for most of the voice measurements. For a few extra numbers we use the
+  pitch curve and simple maths.
+
+--------------------------------------------------------------------------------
+Step 1 — Load the audio and prepare it
+--------------------------------------------------------------------------------
+
+  We check that the file exists and is not empty or too big. We load the
+  sound (the wave and how many measurements per second it has). We prefer a
+  fast reader; if that fails we try others. We convert two-channel sound
+  (left and right) into one channel and make sure the numbers are in a
+  standard range. We also create a sound object that the voice software can
+  use. If the software can’t read the file directly, we save the loaded
+  audio to a temporary WAV file and use that.
+
+  In simple terms: We get the audio into a form the analysis tools can use.
+
+--------------------------------------------------------------------------------
+Step 2 — Pitch (how high or low the voice is)
+--------------------------------------------------------------------------------
+
+  We ask the voice software to find the “pitch” of the voice at each moment
+  (how high or low it sounds). That gives us a curve of pitch over time. We
+  ignore moments where there’s no clear pitch (e.g. silence or noise). From
+  that curve we take:
+    - the average pitch → “mean Fo” (MDVP:Fo(Hz))
+    - the highest pitch → “Fhi”
+    - the lowest pitch → “Flo”
+
+  If something goes wrong we use safe default numbers so we don’t crash.
+
+  In simple terms: We measure how high or low the voice is on average and
+  its range (highest and lowest).
+
+--------------------------------------------------------------------------------
+Step 3 — Jitter (how much the pitch jumps from moment to moment)
+--------------------------------------------------------------------------------
+
+  The software can find the exact times of each “wave” of the voice (each
+  vibration). Jitter is how much the length of those waves varies. We ask
+  the software for several jitter measures (local, absolute, RAP, PPQ5, DDP).
+  Each is a different way to express that variation. We store all of them as
+  our jitter features (5 numbers). If the software fails we use small
+  default values.
+
+  In simple terms: Stable voice → low jitter. Shaky or unstable voice →
+  higher jitter. We get several versions of this “shakiness” of pitch.
+
+--------------------------------------------------------------------------------
+Step 4 — Shimmer (how much the loudness jumps from moment to moment)
+--------------------------------------------------------------------------------
+
+  Shimmer is like jitter but for loudness instead of pitch. We ask the
+  software for several shimmer measures (local, in decibels, APQ3, APQ5,
+  APQ11, DDA). We store all of them (6 numbers). Again, we use defaults if
+  something fails.
+
+  In simple terms: Even loudness → low shimmer. Uneven or trembling
+  loudness → higher shimmer.
+
+--------------------------------------------------------------------------------
+Step 5 — Noise vs tone (HNR and NHR)
+--------------------------------------------------------------------------------
+
+  A clear voice has a strong “tonal” part (the clear, musical quality) and
+  less noise. The software gives us a “Harmonics-to-Noise Ratio” (HNR):
+  higher = clearer voice. We also compute a “Noise-to-Harmonics” style
+  number (NHR) and scale it so it matches the range the model expects.
+
+  In simple terms: One number says how “clean” the voice is (HNR); the other
+  (NHR) is related to how much noise or breath there is.
+
+--------------------------------------------------------------------------------
+Step 6 — Extra “pattern” measures from the pitch curve
+--------------------------------------------------------------------------------
+
+  We take the pitch curve (the list of pitch values over time) and compute
+  a few extra numbers that research uses for voice analysis:
+
+    - RPDE: How “repetitive” vs “random” the pitch pattern is (we use a
+      simplified version based on how the pitch changes from moment to
+      moment).
+    - DFA: How the pitch behaves over longer stretches (again simplified).
+    - spread1 and spread2: How spread out the pitch values are (how much
+      they vary around the average).
+    - D2: A number that reflects how “complex” the pitch pattern is
+      (simplified).
+    - PPE: How “random” or “structured” the pitch sequence is (simplified).
+
+  If we don’t have enough pitch data we use default values. Any invalid or
+  infinite number we replace with 0 and log it.
+
+  In simple terms: These six numbers describe the “shape” and “pattern” of
+  the pitch over time in ways that can help the model.
+
+  We then return all 22 voice features in a fixed order.
+
+================================================================================
+PART 4 — WHEN YOU UPLOAD ONE VIDEO AND ASK FOR EVERYTHING
+================================================================================
+
+  If you upload a single video and choose “extract voice,” “extract
+  handwriting,” and/or “extract gait,” we do the following.
+
+--------------------------------------------------------------------------------
+Voice from the video
+--------------------------------------------------------------------------------
+
+  We use a tool that can take only the sound from the video and save it as
+  a temporary WAV file (standard quality, one channel). Then we run the same
+  voice extraction as in Part 3 on that WAV. When we’re done we delete the
+  temporary file.
+
+  In simple terms: We rip the sound from the video and analyse it like a
+  normal audio file.
+
+--------------------------------------------------------------------------------
+Handwriting from the video
+--------------------------------------------------------------------------------
+
+  We open the video and take one image from the middle (so we’re more likely
+  to get a useful picture). We save that image as a temporary file and run
+  the same handwriting extraction as in Part 2 on it. Then we delete the
+  temporary image.
+
+  In simple terms: We take a snapshot from the middle of the video and
+  analyse it as a handwriting image. Note: this only works if that image
+  actually shows handwriting; otherwise the numbers are from whatever is
+  in the frame.
+
+--------------------------------------------------------------------------------
+Gait from the video
+--------------------------------------------------------------------------------
+
+  We run the same gait extraction as in Part 1 on the full video (or the
+  part we use). So the same video can give us gait and (if requested) voice
+  and handwriting.
+
+  In simple terms: We use the video as a walking video and get the 10 gait
+  numbers from it.
+
+--------------------------------------------------------------------------------
+What you get back
+--------------------------------------------------------------------------------
+
+  The system returns one response with up to three sets of numbers:
+  voice_features (22), handwriting_features (10), and/or gait_features (10),
+  depending on what you asked for. It also returns total_features (the
+  count). No raw video or audio is stored for the prediction—only these
+  numbers.
+
+================================================================================
+SUMMARY IN ONE PARAGRAPH
+================================================================================
+
+  For GAIT we treat the video as a sequence of images, measure “how much
+  moved” between consecutive images, find the step rhythm from that, and
+  from the rhythm and motion we compute 10 numbers (stride timing, speed,
+  regularity, asymmetry). For HANDWRITING we turn the image into black-and-
+  white strokes, measure thickness (pressure), smoothness and wobble (tremor),
+  gaps (pen-up), and length, and combine them into 10 numbers. For VOICE we
+  load the audio, use voice analysis software to get pitch, jitter, shimmer,
+  and clarity (harmonics vs noise), and add simplified measures from the
+  pitch curve to get 22 numbers. When you upload one video and ask for
+  everything, we extract the sound and one middle image from the video and
+  run voice and handwriting extraction on those, and gait on the video
+  itself. All of this is done so that we only ever use lists of numbers for
+  the prediction, not your raw files.
+
+================================================================================
+END OF DOCUMENT
+================================================================================

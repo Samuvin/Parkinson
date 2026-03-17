@@ -1,0 +1,797 @@
+================================================================================
+PARKINSON'S DISEASE PREDICTION SYSTEM
+FEATURES — WHAT EACH ONE IS AND WHY WE USE IT
+(Easy-to-understand version)
+================================================================================
+
+This file lists every number (feature) we get from your video, image, or
+audio. For each one you will find:
+  • What it is (in plain words)
+  • How we get it (in plain words)
+  • Why we use it (what it tells the model)
+  • In simple terms (one-line takeaway)
+
+--------------------------------------------------------------------------------
+OVERVIEW
+--------------------------------------------------------------------------------
+
+  We take three kinds of input and turn them into numbers:
+
+  Walking video  →  10 numbers (how the person walks)
+  Handwriting    →  10 numbers (how the person writes)
+  Voice / audio  →  22 numbers (how the person speaks)
+
+  You need at least one kind of input. More kinds help the system be more
+  accurate. All these numbers are sent to the model to get a result.
+
+================================================================================
+PART 1 — VIDEO GAIT FEATURES (10 numbers from walking video)
+================================================================================
+
+  We get these from a video of someone walking. We look at how the image
+  changes over time and use that to estimate walking pattern.
+
+--------------------------------------------------------------------------------
+1. stride_interval
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How many seconds it takes to complete one full stride. One stride = one
+    step with the left foot plus one step with the right foot (one full
+    cycle of both legs).
+
+  HOW WE GET IT:
+    We find when each step happens in the video (from motion peaks). We
+    measure the time between steps, double it (because two steps = one
+    stride), and average.
+
+  WHY WE USE IT:
+    In Parkinson's, people often take longer for each stride (walk slower
+    and more carefully). The model uses this number to spot stride times
+    that are too long or too short.
+
+  IN SIMPLE TERMS: "How long one full left-right cycle of walking takes."
+
+--------------------------------------------------------------------------------
+2. stride_interval_std
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How much the stride time changes from one stride to the next. If every
+    stride takes almost the same time, this number is low. If stride times
+    jump around, this number is high (irregular rhythm).
+
+  HOW WE GET IT:
+    We look at the time between each pair of steps. We measure how much
+    those times vary (standard deviation) and scale it.
+
+  WHY WE USE IT:
+    In Parkinson's, walking rhythm is often irregular (not steady). The
+    model uses this to spot uneven walking patterns.
+
+  IN SIMPLE TERMS: "Whether the walking rhythm is steady or all over the place."
+
+--------------------------------------------------------------------------------
+3. swing_time
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How many seconds the foot is in the air during one step (not touching
+    the ground).
+
+  HOW WE GET IT:
+    We split the video into moments with less motion (foot in air) and
+    more motion (foot on ground). The less-motion time per step gives us
+    swing time.
+
+  WHY WE USE IT:
+    In Parkinson's, the timing of "foot in air" vs "foot on ground" can
+    change. This helps the model understand the walking pattern.
+
+  IN SIMPLE TERMS: "How long the foot stays in the air per step."
+
+--------------------------------------------------------------------------------
+4. stance_time
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How many seconds the foot is on the ground during one step.
+
+  HOW WE GET IT:
+    Same idea as swing time: we use motion in the video. Moments with more
+    motion (foot on ground) give us stance time per step.
+
+  WHY WE USE IT:
+    In Parkinson's, people often keep the foot on the ground longer (more
+    cautious, slower transition). With swing_time, this describes how the
+    step is split between air and ground.
+
+  IN SIMPLE TERMS: "How long the foot is on the ground per step."
+
+--------------------------------------------------------------------------------
+5. double_support
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How many seconds both feet are on the ground at the same time (the
+    brief overlap when you're moving from one foot to the other).
+
+  HOW WE GET IT:
+    We get it from stance time and how much the motion in the video varies.
+
+  WHY WE USE IT:
+    In Parkinson's, people often spend more time with both feet on the
+    ground (for balance). The model uses this as a sign of stability and
+    confidence while walking.
+
+  IN SIMPLE TERMS: "How long both feet are on the ground at once."
+
+--------------------------------------------------------------------------------
+6. gait_speed
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How fast the person is walking (distance per second). Simply: walking
+    speed.
+
+  HOW WE GET IT:
+    We count steps in the video and estimate how far each step is from the
+    amount of movement. (Steps × step length) ÷ video length = speed.
+
+  WHY WE USE IT:
+    Slower walking is a main sign of Parkinson's (slowness of movement).
+    The model uses this as a strong clue for slowed movement.
+
+  IN SIMPLE TERMS: "How fast they are walking."
+
+--------------------------------------------------------------------------------
+7. cadence
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How many steps per minute. It's the rhythm or rate of stepping (e.g.
+    100 steps per minute).
+
+  HOW WE GET IT:
+    We count how many steps happen in the video, divide by the duration
+    in seconds, and multiply by 60. We keep the result in a normal range
+    (e.g. 70–150 steps per minute).
+
+  WHY WE USE IT:
+    In Parkinson's, step rate is often lower. With speed and step length,
+    this helps the model judge overall walking rhythm and slowness.
+
+  IN SIMPLE TERMS: "How many steps per minute."
+
+--------------------------------------------------------------------------------
+8. step_length
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How far one step goes (distance covered in a single step), in metres
+    or similar units. We estimate it from the video.
+
+  HOW WE GET IT:
+    We get it from walking speed and cadence: speed ÷ (steps per second).
+    If we don't have cadence, we use the strength of motion in the video.
+
+  WHY WE USE IT:
+    Shorter steps (shuffling) are common in Parkinson's. The model uses
+    this to spot a shortened step pattern.
+
+  IN SIMPLE TERMS: "How long each step is (distance)."
+
+--------------------------------------------------------------------------------
+9. stride_regularity
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    A score (between 0 and 1) for how consistent the walking is. High
+    score = very steady, even pattern. Low score = uneven, changing
+    pattern.
+
+  HOW WE GET IT:
+    We look at how consistent the "motion amount" is from moment to moment
+    in the video. Steady motion → high regularity; jumpy motion → low.
+
+  WHY WE USE IT:
+    Irregular, unsteady walking is a common sign of Parkinson's. This
+    number tells the model how steady or variable the walk is.
+
+  IN SIMPLE TERMS: "How steady and even the walking pattern is (0–1)."
+
+--------------------------------------------------------------------------------
+10. gait_asymmetry
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How different the left side is from the right (or the start of the
+    video from the end). Higher number = more uneven (one side or one
+    part stronger or different).
+
+  HOW WE GET IT:
+    We compare the average motion in the first half of the video to the
+    second half. We turn that difference into a number in a set range.
+
+  WHY WE USE IT:
+    In Parkinson's, one side is often more affected, so the walk can be
+    uneven. The model uses this to spot one-sided or unbalanced walking.
+
+  IN SIMPLE TERMS: "Whether the walk is even on both sides or uneven."
+
+================================================================================
+PART 2 — HANDWRITING FEATURES (10 numbers from a handwriting image)
+================================================================================
+
+  We get these from one photo of handwriting or a drawing. We don't use a
+  special pen or tablet—only the image. So we estimate everything from
+  how the strokes look (thickness, smoothness, wobbly lines, etc.).
+
+--------------------------------------------------------------------------------
+1. mean_pressure
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Average "pressure" when writing. We can't measure real pressure from
+    a photo, so we use stroke thickness: thicker strokes = we assume
+    higher pressure.
+
+  HOW WE GET IT:
+    We measure how thick the pen strokes are at many points (how far from
+    the edge of the stroke to the middle). We average those thicknesses
+    and scale to a number we use.
+
+  WHY WE USE IT:
+    In Parkinson's, pressure can be weaker or more uneven (due to stiffness
+    or tremor). The model uses this to understand force control while
+    writing.
+
+  IN SIMPLE TERMS: "On average, how hard the pen was pressed (from stroke thickness)."
+
+--------------------------------------------------------------------------------
+2. std_pressure
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How much the pressure (stroke thickness) changes—some parts thin,
+    some parts thick. High value = very uneven pressure.
+
+  HOW WE GET IT:
+    We use the same thickness measurements as mean_pressure and measure
+    how much they vary (standard deviation).
+
+  WHY WE USE IT:
+    A lot of variation in pressure can mean tremor or inconsistent control.
+    The model uses it to spot irregular force while writing.
+
+  IN SIMPLE TERMS: "How much the stroke thickness varies (thin vs thick)."
+
+--------------------------------------------------------------------------------
+3. mean_velocity
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Estimated "speed" of writing. We can't see real speed from one photo,
+    so we guess from how smooth the lines are: smoother lines often mean
+    faster, more fluent movement.
+
+  HOW WE GET IT:
+    We look at the outline of the strokes and how much the direction
+    changes (sharp turns vs smooth curves). Fewer sharp turns = higher
+    smoothness = we set a higher "speed" number.
+
+  WHY WE USE IT:
+    Slower writing is common in Parkinson's. The model uses this to spot
+    slowness of movement in handwriting.
+
+  IN SIMPLE TERMS: "Estimated writing speed (from how smooth the lines are)."
+
+--------------------------------------------------------------------------------
+4. std_velocity
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How much the estimated writing speed changes along the stroke—sometimes
+    "faster," sometimes "slower" (from the shape of the line).
+
+  HOW WE GET IT:
+    From the same smoothness analysis we get a measure of how much that
+    smoothness varies.
+
+  WHY WE USE IT:
+    Uneven speed (stops and starts, hesitations) can point to motor
+    problems. The model uses it to capture how fluent the movement is.
+
+  IN SIMPLE TERMS: "How consistent the writing speed is along the stroke."
+
+--------------------------------------------------------------------------------
+5. mean_acceleration
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Estimated "acceleration" of the pen—how much the movement changes
+    speed. Smooth movement = more constant; jerky movement = changing
+    acceleration.
+
+  HOW WE GET IT:
+    We derive it from the same smoothness we use for velocity. Smoother
+    strokes give a higher number.
+
+  WHY WE USE IT:
+    Jerky or changing acceleration is linked to tremor and stiffness.
+    The model uses it to capture how smooth the movement is.
+
+  IN SIMPLE TERMS: "Whether the pen movement is smooth or jerky."
+
+--------------------------------------------------------------------------------
+6. pen_up_time
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    How much time the pen is off the paper—i.e. gaps between strokes when
+    the person lifts the pen. We give a number that acts like "proportion
+    of time in the air."
+
+  HOW WE GET IT:
+    We slightly thicken the strokes in the image and count how many
+    separate blobs of writing there are. More separate blobs = more pen
+    lifts = higher pen-up. We turn that into a time-like number.
+
+  WHY WE USE IT:
+    In Parkinson's, people often pause more and lift the pen more (very
+    small writing, hesitation). The model uses it to spot broken-up
+    writing.
+
+  IN SIMPLE TERMS: "How much the pen was in the air (gaps between strokes)."
+
+--------------------------------------------------------------------------------
+7. stroke_length
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Total amount of "ink" on the page—how much writing there is. We
+    measure it as the number of stroke pixels (or a scaled value).
+
+  HOW WE GET IT:
+    We count all the pixels that are part of the writing (not background)
+    and divide by 1000 to get a usable number.
+
+  WHY WE USE IT:
+    Very little writing (small total length) can mean very small writing
+    or less output. The model uses it as an overall measure of how much
+    was written.
+
+  IN SIMPLE TERMS: "How much writing is on the page (total length of strokes)."
+
+--------------------------------------------------------------------------------
+8. writing_tempo
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    The overall "tempo" of writing—how continuous it is. High tempo =
+    more continuous; low tempo = more stops and pen lifts.
+
+  HOW WE GET IT:
+    We set it from pen-up: when pen-up is high, tempo is low; when pen-up
+    is low, tempo is high (inverse relationship).
+
+  WHY WE USE IT:
+    Slower or more interrupted tempo is common in Parkinson's. The model
+    uses it to capture the rhythm of writing.
+
+  IN SIMPLE TERMS: "How continuous the writing is (few vs many pauses)."
+
+--------------------------------------------------------------------------------
+9. tremor_frequency
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    A number (in Hz) that represents how much "wobble" or shake there is
+    in the stroke—like tremor in the hand while writing.
+
+  HOW WE GET IT:
+    We thin the stroke to a single line down the middle. We fit a
+    straight line through it and see how much the real stroke wanders
+    away from that line. More wander = more tremor; we scale it to a
+    range around 5–8 Hz.
+
+  WHY WE USE IT:
+    Tremor (at rest or while moving) is a core sign of Parkinson's. This
+    helps the model detect tremor in handwriting even from one photo.
+
+  IN SIMPLE TERMS: "How much the line wobbles or shakes (tremor)."
+
+--------------------------------------------------------------------------------
+10. fluency_score
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    A score from 0 to 1 for how smooth and flowing the writing is. 1 =
+    very smooth and continuous; 0 = jerky, broken, or shaky.
+
+  HOW WE GET IT:
+    We combine smoothness (from the shape of the strokes) and tremor.
+    High smoothness and low tremor = high fluency. Long continuous
+    strokes add a small bonus. We clip the result to 0–1.
+
+  WHY WE USE IT:
+    Less fluent writing (jerky, hesitant, or shaky) is a key sign in
+    Parkinson's. The model uses it as an overall measure of writing
+    quality.
+
+  IN SIMPLE TERMS: "How smooth and flowing the writing is (0–1)."
+
+================================================================================
+PART 3 — VOICE / SPEECH FEATURES (22 numbers from audio)
+================================================================================
+
+  We get these from a recording of the person speaking. We use voice
+  analysis software (Praat) for pitch, stability, and loudness, and
+  simple maths on the pitch curve for a few extra measures.
+
+--------------------------------------------------------------------------------
+1. MDVP:Fo(Hz)
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    The average pitch of the voice in Hertz (Hz). Pitch = how high or
+    low the voice sounds. This is the average over the recording.
+
+  HOW WE GET IT:
+    We use voice analysis software to get the pitch at each moment. We
+    take the average of those pitch values (ignoring silence and noise).
+
+  WHY WE USE IT:
+    In Parkinson's, pitch can change (e.g. flatter, less variation). The
+    model uses this as a basic measure of the voice.
+
+  IN SIMPLE TERMS: "Average pitch of the voice (how high or low it sounds)."
+
+--------------------------------------------------------------------------------
+2. MDVP:Fhi(Hz)
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    The highest pitch in the recording (in Hz). Together with the lowest,
+    it shows the pitch range.
+
+  HOW WE GET IT:
+    From the same pitch curve we take the maximum pitch value.
+
+  WHY WE USE IT:
+    A narrow range (low highest pitch) can mean a flat or quiet voice.
+    The model uses it to judge pitch variation.
+
+  IN SIMPLE TERMS: "Highest pitch in the recording."
+
+--------------------------------------------------------------------------------
+3. MDVP:Flo(Hz)
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    The lowest pitch in the recording (in Hz). With Fo and Fhi, it defines
+    the pitch range.
+
+  HOW WE GET IT:
+    From the same pitch curve we take the minimum pitch value.
+
+  WHY WE USE IT:
+    A narrow pitch range is common in Parkinson's speech. This helps the
+    model see that.
+
+  IN SIMPLE TERMS: "Lowest pitch in the recording."
+
+--------------------------------------------------------------------------------
+4. MDVP:Jitter(%)
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Jitter in percent. It measures how much the pitch "shakes" from one
+    moment to the next—how stable the pitch is. High jitter = unstable
+    pitch (shaky voice).
+
+  HOW WE GET IT:
+    The software finds each vibration cycle of the voice and measures how
+    much the length of those cycles varies. We turn that into a percentage.
+
+  WHY WE USE IT:
+    Higher jitter often means less stable voice (tremor, instability). It's
+    a well-known marker in Parkinson's voice analysis.
+
+  IN SIMPLE TERMS: "How much the pitch shakes from moment to moment (%)."
+
+--------------------------------------------------------------------------------
+5. MDVP:Jitter(Abs)
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Same as jitter but in time (e.g. seconds) instead of percent. Another
+    way to say "how unstable the pitch is."
+
+  HOW WE GET IT:
+    The same software gives us jitter in absolute time units.
+
+  WHY WE USE IT:
+    Same as Jitter(%)—pitch instability—but in a different unit so the
+    model can use both.
+
+  IN SIMPLE TERMS: "Pitch shakiness in time units (same idea as Jitter %)."
+
+--------------------------------------------------------------------------------
+6. MDVP:RAP
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    RAP = Relative Average Perturbation. Another measure of how much the
+    pitch period (length of each vibration) varies—another form of jitter.
+
+  HOW WE GET IT:
+    The software computes it from the voice cycles over a short window.
+
+  WHY WE USE IT:
+    It gives the model another view of pitch irregularity (small changes
+    from cycle to cycle).
+
+  IN SIMPLE TERMS: "Another measure of pitch shakiness (jitter)."
+
+--------------------------------------------------------------------------------
+7. MDVP:PPQ
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Jitter over a slightly longer window (5 cycles). So it's a "smoothed"
+    jitter—one odd moment doesn't change it much.
+
+  HOW WE GET IT:
+    The software gives us this from the pitch periods (ppq5).
+
+  WHY WE USE IT:
+    Smoothed jitter is more stable; the model uses it for a reliable
+    measure of voice stability.
+
+  IN SIMPLE TERMS: "Pitch shakiness averaged over 5 cycles (smoother measure)."
+
+--------------------------------------------------------------------------------
+8. Jitter:DDP
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Another jitter-related number—the average difference in jitter between
+    consecutive periods. Often computed as 3 × RAP.
+
+  HOW WE GET IT:
+    We get it from RAP (e.g. RAP × 3).
+
+  WHY WE USE IT:
+    It's part of the standard set of voice measures (e.g. UCI dataset)
+    and helps the model judge voice quality.
+
+  IN SIMPLE TERMS: "Another pitch-perturbation measure (related to RAP)."
+
+--------------------------------------------------------------------------------
+9. MDVP:Shimmer
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Shimmer = how much the loudness (amplitude) of the voice changes from
+    one moment to the next. High shimmer = uneven, shaky loudness.
+
+  HOW WE GET IT:
+    The software measures the amplitude of each vibration cycle and how
+    much it varies (shimmer).
+
+  WHY WE USE IT:
+    Unstable loudness (e.g. weak or trembling voice) is common in
+    Parkinson's. The model uses it for voice quality.
+
+  IN SIMPLE TERMS: "How much the loudness shakes from moment to moment."
+
+--------------------------------------------------------------------------------
+10. MDVP:Shimmer(dB)
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Same as Shimmer but in decibels (dB)—the unit we use for loudness.
+    Another way to express loudness variation.
+
+  HOW WE GET IT:
+    The software gives us shimmer in dB (local_dB).
+
+  WHY WE USE IT:
+    Same idea as Shimmer—loudness instability—in dB for the model to use.
+
+  IN SIMPLE TERMS: "Loudness shakiness in decibels."
+
+--------------------------------------------------------------------------------
+11. Shimmer:APQ3
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Shimmer averaged over 3 cycles. A slightly smoothed measure of
+    loudness variation so one odd moment has less effect.
+
+  HOW WE GET IT:
+    The software gives us this (apq3).
+
+  WHY WE USE IT:
+    Helps the model judge how consistent the loudness is.
+
+  IN SIMPLE TERMS: "Loudness variation averaged over 3 cycles."
+
+--------------------------------------------------------------------------------
+12. Shimmer:APQ5
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Shimmer averaged over 5 cycles. Same idea as APQ3 but over a bit
+    longer window.
+
+  HOW WE GET IT:
+    The software gives us this (apq5).
+
+  WHY WE USE IT:
+    Another smoothed loudness measure that's standard in voice datasets.
+
+  IN SIMPLE TERMS: "Loudness variation averaged over 5 cycles."
+
+--------------------------------------------------------------------------------
+13. MDVP:APQ
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Shimmer over a longer window (11 cycles). So it's "long-term" loudness
+    stability.
+
+  HOW WE GET IT:
+    The software gives us this (apq11).
+
+  WHY WE USE IT:
+    Gives the model an overall picture of loudness stability over time.
+
+  IN SIMPLE TERMS: "Loudness variation over a longer stretch (11 cycles)."
+
+--------------------------------------------------------------------------------
+14. Shimmer:DDA
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Another shimmer-related number—the average difference in shimmer
+    between consecutive periods. Often 3 × APQ3.
+
+  HOW WE GET IT:
+    We get it from APQ3 (e.g. APQ3 × 3).
+
+  WHY WE USE IT:
+    Complements the other shimmer numbers; part of the standard voice set.
+
+  IN SIMPLE TERMS: "Another loudness-perturbation measure (related to APQ3)."
+
+--------------------------------------------------------------------------------
+15. NHR
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Noise-to-Harmonics Ratio. How much of the voice is noise vs clear
+    tone. Higher NHR = more noise, less clear voice (e.g. breathy).
+
+  HOW WE GET IT:
+    The software gives us a measure of how "tonal" the voice is
+    (harmonicity). We turn that into a noise ratio and scale it.
+
+  WHY WE USE IT:
+    Breathiness and noise are common in Parkinson's. NHR helps the model
+    capture worsening voice quality.
+
+  IN SIMPLE TERMS: "How noisy or breathy the voice is (vs clear tone)."
+
+--------------------------------------------------------------------------------
+16. HNR
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Harmonics-to-Noise Ratio. How much the voice is clear tone vs noise.
+    Higher HNR = clearer, more "musical" voice; lower = more noise.
+
+  HOW WE GET IT:
+    The software analyses the voice and gives us the mean harmonicity
+    (HNR).
+
+  WHY WE USE IT:
+    Lower HNR (more noise) is linked to voice problems in Parkinson's.
+    The model uses it for overall voice quality.
+
+  IN SIMPLE TERMS: "How clear and tonal the voice is (vs noisy)."
+
+--------------------------------------------------------------------------------
+17. RPDE
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    A number that captures how "repetitive" vs "random" the pitch pattern
+    is over time (complexity or regularity of the signal). The full name
+    is Recurrence Period Density Entropy; we use a simplified version.
+
+  HOW WE GET IT:
+    We look at how the pitch changes from moment to moment and compute a
+    kind of "entropy" (randomness) from that.
+
+  WHY WE USE IT:
+    Voice in Parkinson's can have a different pattern (more or less
+    regular). RPDE helps capture that.
+
+  IN SIMPLE TERMS: "How regular or random the pitch pattern is over time."
+
+--------------------------------------------------------------------------------
+18. DFA
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    A number that captures "long-range" structure in the pitch—how
+    patterns repeat or scale over longer stretches. Full name: Detrended
+    Fluctuation Analysis; we use a simplified version.
+
+  HOW WE GET IT:
+    We analyse the pitch curve (how it goes up and down over time) with a
+    simplified DFA method.
+
+  WHY WE USE IT:
+    That long-range structure can change in Parkinson's. The model uses
+    it with other voice measures.
+
+  IN SIMPLE TERMS: "How the pitch pattern behaves over longer stretches."
+
+--------------------------------------------------------------------------------
+19. spread1
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    A measure of how "spread out" the pitch values are—how much they vary
+    around the average. We store it in a compact form (using log).
+
+  HOW WE GET IT:
+    We take the pitch values, compute their average and how much they
+    vary (standard deviation), and combine them (e.g. log of ratio).
+
+  WHY WE USE IT:
+    Pitch spread helps the model capture how much the pitch varies in one
+    number.
+
+  IN SIMPLE TERMS: "How much the pitch varies (spread of values)."
+
+--------------------------------------------------------------------------------
+20. spread2
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Another measure of how spread out the pitch is (variation relative to
+    the average). Similar to spread1 but a different formula.
+
+  HOW WE GET IT:
+    We take the pitch curve and compute (standard deviation ÷ average).
+
+  WHY WE USE IT:
+    Together with spread1, it gives the model a good picture of pitch
+    variability.
+
+  IN SIMPLE TERMS: "Another measure of pitch variation (spread)."
+
+--------------------------------------------------------------------------------
+21. D2
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    A number that reflects the "complexity" of the voice pattern—how
+    complicated or structured the pitch behaviour is. The full name is
+    correlation dimension; we use a simplified version.
+
+  HOW WE GET IT:
+    We estimate it from the pitch series (how pitch changes over time).
+
+  WHY WE USE IT:
+    Voice dynamics can change in Parkinson's. D2 helps capture that
+    complexity.
+
+  IN SIMPLE TERMS: "How complex or structured the pitch pattern is."
+
+--------------------------------------------------------------------------------
+22. PPE
+--------------------------------------------------------------------------------
+  WHAT IT IS:
+    Pitch Period Entropy. How "random" or "structured" the sequence of
+    pitch periods is. High entropy = more random; low = more regular.
+
+  HOW WE GET IT:
+    We build a histogram of the pitch periods (how often each value
+    appears) and compute entropy from it, then scale it.
+
+  WHY WE USE IT:
+    That randomness can change in Parkinson's (more irregular or more
+    rigid). The model uses it to describe the voice pattern.
+
+  IN SIMPLE TERMS: "How random or regular the pitch sequence is (entropy)."
+
+================================================================================
+SUMMARY — HOW ALL FEATURES WORK TOGETHER
+================================================================================
+
+  • Every feature is just a number. The model scales these numbers and
+    feeds them into a neural network (or a backup machine-learning
+    model).
+
+  • Gait (10 numbers): describe slowness, irregularity, asymmetry, and
+    timing of walking.
+
+  • Handwriting (10 numbers): describe pressure, speed, tremor, fluency,
+    and pen lifts from one image.
+
+  • Voice (22 numbers): describe pitch, pitch stability (jitter), loudness
+    stability (shimmer), clarity (HNR/NHR), and pattern (RPDE, DFA,
+    spread, D2, PPE).
+
+  • The model combines all the numbers you send (from one or more types of
+    input) and gives a prediction (e.g. Parkinson's vs Healthy) with a
+    confidence score. This system is for research and screening only; it
+    is not a substitute for a doctor's diagnosis.
+
+================================================================================
+END OF DOCUMENT
+================================================================================

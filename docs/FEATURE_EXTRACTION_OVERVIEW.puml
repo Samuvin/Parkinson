@@ -1,0 +1,57 @@
+@startuml Feature_Extraction_Overview
+title What We Extract From Uploaded Data - Simple Overview
+
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 11
+skinparam ArrowColor black
+skinparam packageBackgroundColor white
+skinparam packageBorderColor black
+skinparam componentBackgroundColor white
+skinparam componentBorderColor black
+
+package "INPUT" {
+  [Audio file] as audio
+  [Handwriting image] as img
+  [Walking video] as video
+  [Combined video] as combined
+}
+
+package "EXTRACTION" {
+  [Voice pipeline] as voice_pipe
+  [Image pipeline] as img_pipe
+  [Video pipeline] as video_pipe
+}
+
+package "OUTPUT" {
+  [22 speech features] as speech_out
+  [10 handwriting features] as hand_out
+  [10 gait features] as gait_out
+}
+
+package "PREDICTION" {
+  [Model: label + confidence] as model
+}
+
+audio --> voice_pipe
+img --> img_pipe
+video --> video_pipe
+combined --> voice_pipe
+combined --> img_pipe
+combined --> video_pipe
+
+voice_pipe --> speech_out
+img_pipe --> hand_out
+video_pipe --> gait_out
+
+speech_out --> model
+hand_out --> model
+gait_out --> model
+
+note bottom of "INPUT"
+  Gait = from video
+  Handwriting = from image or one frame
+  Voice = from audio or video track
+end note
+
+@enduml

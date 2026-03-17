@@ -1,0 +1,369 @@
+@startuml Algorithm_Internals
+title Parkinson's Prediction Model — Descriptive Flow\n(Feature Extraction → Model → Output)
+
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 11
+skinparam ArrowColor black
+skinparam ActivityFontSize 10
+skinparam ActivityFontStyle bold
+skinparam NoteFontSize 9
+
+|#F5E6FF|**0. FEATURE EXTRACTION**\n(Three parallel paths — we use different tools per modality)|
+start
+:User provides raw input:\nAudio file, Handwriting image, and/or Gait video;
+
+note right
+  **Why we extract features:**
+  • Raw files (audio/image/video) are too complex for AI to understand directly
+  • We need to convert them into numbers that represent important patterns
+  • Each modality needs different analysis techniques
+  • Features capture the essence: tremors, pauses, irregularities, etc.
+end note
+
+fork
+  :**AUDIO** (if user sent audio);
+  :We use **soundfile** / **librosa** to load audio\nand **Parselmouth (Praat)** + **numpy**\nto extract the **22 speech features**.;
+  :Output: **22 numbers**;
+  note right
+    Fo, Fhi, Flo, Jitter(%, Abs, RAP, PPQ, DDP), Shimmer, Shimmer(dB), APQ3, APQ5, APQ, DDA, NHR, HNR, RPDE, DFA, spread1, spread2, D2, PPE
+  end note
+fork again
+  :**HANDWRITING** (if user sent image);
+  :We use **OpenCV (cv2)** / **PIL** to load image\nand **scipy** / **skimage** to analyse strokes\nto extract the **10 handwriting features**.;
+  :Output: **10 numbers**;
+  note right
+    mean_pressure, std_pressure, mean_velocity, std_velocity, mean_acceleration, pen_up_time, stroke_length, writing_tempo, tremor_frequency, fluency_score
+  end note
+fork again
+  :**GAIT** (if user sent video);
+  :We use **OpenCV (cv2)** to open video,\ncompute motion and peak detection,\nto extract the **10 gait features**.;
+  :Output: **10 numbers**;
+  note right
+    stride_interval, stride_interval_std, swing_time, stance_time, double_support, gait_speed, cadence, step_length, stride_regularity, gait_asymmetry
+  end note
+end fork
+
+:We now have 1, 2, or 3 feature lists\n(22 and/or 10 and/or 10 numbers);
+
+note right
+  **What we achieved:**
+  • Converted complex files into simple numbers
+  • Speech: 22 numbers (pitch, jitter, tremor, etc.)
+  • Handwriting: 10 numbers (pressure, velocity, fluency, etc.)
+  • Gait: 10 numbers (stride, speed, regularity, etc.)
+  • Now the AI can work with these numbers!
+end note
+
+|#E8F4FD|**1. INPUT TO MODEL**\n(We give the 3 feature arrays to the model — SE-ResNet 1D CNN)|
+:We give **3 arrays of feature numbers** to the model.\nOur model = **3× SE-ResNet 1D CNN** (one encoder per modality)\n+ **Attention Fusion** + **Dense Classifier**.;
+note right
+  Speech array [22 numbers] → speech encoder
+  Handwriting array [10 numbers] → handwriting encoder
+  Gait array [10 numbers] → gait encoder
+  Each encoder is a SE-ResNet 1D CNN. Then we combine and classify.
+end note
+
+:Do we have **all three** (speech, handwriting, gait)?;
+
+if (All three provided?) then (yes)
+  :We use **all three** real vectors.\nWe scale each with saved scalers.\nWe pass all three to the model.;
+  :Attention will assign 3 weights (e.g. 0.4, 0.35, 0.25)\nover speech, handwriting, gait.;
+else (no — one or two missing)
+  :We **zero-fill** the missing modality:\nmissing speech → 22 zeros\nmissing handwriting → 10 zeros\nmissing gait → 10 zeros;
+  :We still pass **three** inputs to the model.\nAttention will put high weight on the real one(s),\nlow weight on the zero-filled ones (e.g. 0.95 gait, 0.03, 0.02).;
+endif
+
+:Model always receives **3 vectors**:\nSpeech [22], Handwriting [10], Gait [10]\n(each real or zero-filled);
+
+note right
+  **Why this approach works:**
+  • Model always expects 3 inputs (consistency)
+  • Missing data gets zeros (no errors or crashes)  
+  • Attention mechanism automatically figures out what's real vs. zero-filled
+  • Same algorithm works for all scenarios (1, 2, or 3 modalities)
+  • Smart design: one model handles all cases!
+end note
+note right
+  **Example (user sent only speech and gait):**
+  Speech (passed)     → [1, 2, 3, 4, 5, 6, 7, ..., 22 numbers]
+  Handwriting (missing) → [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  ← we fill with zeros
+  Gait (passed)       → [2, 3, 4, 5, 6, 7, 8, 9, 10, ...]
+  If we do **not** pass a modality, we use **zeros** for that list.
+end note
+
+:We **scale** each vector and pass them to the model.\nEach array goes to its own SE-ResNet 1D encoder;
+
+|#E8F4FD|**2. INSIDE THE MODEL — Three encoders in parallel**\n(Each encoder is SE-ResNet 1D; they run separately)|
+:We have **3 separate SE-ResNet encoders**.\nEach gets one input and produces one 64-d output.\n**They all do the SAME steps, but on different data.**;
+
+fork
+  :**Speech encoder**\nGets: Speech array [22 numbers]\nReshapes to: [1, 22]\nGoes through: Stem → Block1 → Block2 → Pool;
+  :Outputs: **64-d speech embedding**;
+fork again
+  :**Handwriting encoder**\nGets: Handwriting array [10 numbers]\nReshapes to: [1, 10]\nGoes through: Stem → Block1 → Block2 → Pool;
+  :Outputs: **64-d handwriting embedding**;
+fork again
+  :**Gait encoder**\nGets: Gait array [10 numbers]\nReshapes to: [1, 10]\nGoes through: Stem → Block1 → Block2 → Pool;
+  :Outputs: **64-d gait embedding**;
+end fork
+
+:All three encoders use the **same architecture** but **different learned weights**.\nEach processes its input **separately** and **simultaneously**.\nNow let's see what happens **inside each encoder**:;
+
+note right
+  **What "in parallel" means:**
+  ✓ All 3 encoders run at the same time (not one after another)
+  ✓ Speech encoder works on speech data only
+  ✓ Handwriting encoder works on handwriting data only  
+  ✓ Gait encoder works on gait data only
+  ✓ They don't talk to each other until attention fusion
+  ✓ Each has its own trained filters/weights (learned separately)
+end note
+
+:**INSIDE EACH ENCODER (5 simple steps)**\nEach encoder does: Stem → Block1 → Block2 → Pool → Linear;
+
+note right
+  **What encoders do (the magic!):**
+  • Take simple numbers and find complex patterns
+  • Each step learns different levels of features
+  • Stem: Basic patterns (is this tremor-like?)
+  • Block1 & 2: Complex patterns (combinations of symptoms)
+  • Pool: Summary (what's the overall picture?)
+  • Linear: Final encoding (compressed essence in 64 numbers)
+  • Like having an expert doctor analyze each type of data!
+end note
+
+:**STEM** - Conv1d (1→32) + BatchNorm + ReLU;
+:**Why:** Transform 1 row of features into 32 different "views" using learned filters.\nLike having 32 different ways to look at the same data.;
+
+:**BLOCK 1** - Conv1d + BN + ReLU + Conv1d + BN + SE + Add Skip + ReLU;
+:**Why:** Refine the 32 views by mixing them together, then add back the original (skip connection)\nso the block learns "what to change" instead of "what the output should be".;
+
+:**BLOCK 2** - Conv1d (32→64) + BN + ReLU + Conv1d + BN + SE + Add Skip + ReLU;
+:**Why:** Create more complex patterns (64 views instead of 32) and again use skip connection\nto make learning easier and prevent gradients from vanishing.;
+
+:**POOL** - AdaptiveAvgPool1d(1);
+:**Why:** Compress each of the 64 views into 1 number.\n64 rows of data → 64 single numbers. This gives us the essence of each pattern.;
+
+:**LINEAR** - Linear(64→64);
+:**Why:** Final transformation to create the 64-dimensional embedding that goes to attention.\nThis is the "summary" of this modality that will be combined with others.;
+
+note right
+  **What each operation does (with formulas):**
+  
+  **Conv1d:** Slides a window (filter) over input, does weighted multiplication.
+  Formula: output = w1×a + w2×b + w3×c (for kernel size 3)
+  
+  **BatchNorm (BN):** Normalizes per channel (not per position).
+  Formula: normalized = (value − mean) / √(variance + ε)
+  ε is a small constant (0.00001) so we never divide by zero.
+  Purpose: Keeps values in normal range so they don't keep growing as we stack layers.
+  
+  **ReLU:** Sets negative values to 0.
+  Formula: output = max(0, input)
+  Purpose: Adds non-linearity and removes negativity that hurts learning.
+  
+  **Dropout:** Randomly sets some values to 0 during training.
+  Purpose: Network doesn't depend on specific numbers, learns robust patterns.
+  
+  **SE (Squeeze-Excitation):**
+  - Squeeze: Average each channel → 1 number per channel
+  - Excitation: Small network (2 layers) turns numbers into weights (0-1)
+  - Scale: Multiply each channel by its weight (important stay strong)
+  
+  **Add Skip:** Adds original input + processed output.
+  Formula: output = original_input + processed_result
+  Purpose: Block only learns "what to change" instead of "final result."
+end note
+
+:After all three encoders: we have **3 vectors of 64 numbers** (one from speech, one from handwriting, one from gait).;
+note right
+  **Summary:** Each encoder takes its input (22 or 10 numbers) and transforms it through 5 steps into a 64-number summary.
+  The skip connections make training easier, and the SE blocks help focus on important patterns.
+end note
+
+|#FFF4E6|**3. ATTENTION FUSION**\n(Combine the 3 vectors into one)|
+
+note left
+  **Why we need attention fusion:**
+  • We have 3 separate "opinions" (one per modality)
+  • Some might be more reliable than others for this patient
+  • Attention learns to weight them intelligently
+  • Like having 3 specialists give opinions, then a senior doctor decides how much to trust each one
+  • Result: Best of all worlds combined into one informed decision!
+end note
+:Each encoder sends its **64-d embedding** to attention fusion:\n• Speech encoder → 64-d speech vector\n• Handwriting encoder → 64-d handwriting vector\n• Gait encoder → 64-d gait vector;
+note right
+  **Input to attention:** 3 vectors, each with 64 numbers
+  Total shape: [3 × 64]
+  Each vector summarizes one modality after going through Stem→Block1→Block2→Pool→Linear
+end note
+
+:We **stack** the 3 embeddings → [3, 64] tensor;
+:We **score** each 64-d vector with a small network (64→32 Tanh → 32→1)\n→ one importance score per modality;
+note right
+  **Detailed scoring process for each modality:**
+  Speech [64 numbers] → Linear(64→32) → Tanh → Linear(32→1) → Score: 2.1
+  Handwriting [64 numbers] → Linear(64→32) → Tanh → Linear(32→1) → Score: 0.8  
+  Gait [64 numbers] → Linear(64→32) → Tanh → Linear(32→1) → Score: 1.5
+  
+  **Neural network components used:**
+  • Linear: Standard neural network layer (matrix multiplication + bias)
+    Formula: output = weights × input + bias
+  • Tanh: Activation function that squashes values between -1 and +1
+    Formula: tanh(x) = (e^x - e^(-x)) / (e^x + e^(-x))
+    Purpose: Adds non-linearity, prevents values from exploding
+  
+  **Result:** 3 raw scores [2.1, 0.8, 1.5]
+  Each modality's complex 64-d representation gets compressed to 1 simple importance score.
+end note
+:We apply **Softmax** over the 3 scores\n→ 3 weights that add up to 1.0;
+note right
+  **Softmax - converts raw scores to probabilities:**
+  
+  **Why we use Softmax:**
+  • Raw scores [2.1, 0.8, 1.5] are hard to interpret
+  • We need weights that add up to 1.0 (100%)
+  • We want higher scores to get higher weights
+  
+  **Formula:** For each score: e^score / sum(e^all_scores)
+  
+  **Example calculation:**
+  Raw scores: [2.1, 0.8, 1.5]
+  Step 1: e^2.1=8.17, e^0.8=2.23, e^1.5=4.48
+  Step 2: Sum = 8.17+2.23+4.48 = 14.88
+  Step 3: Divide each by sum:
+  • Speech: 8.17÷14.88 = 0.55 (55%)
+  • Handwriting: 2.23÷14.88 = 0.15 (15%)  
+  • Gait: 4.48÷14.88 = 0.30 (30%)
+  
+  **Result:** [0.55, 0.15, 0.30] - adds up to 1.0!
+  Now we know exactly how much to trust each modality.
+end note
+
+:We compute **weighted sum**:\nfused = weight1 × speech_64d + weight2 × handwriting_64d + weight3 × gait_64d;
+:We **get**: one **fused** vector (64 numbers)\nand **attention_weights** (showing how much we trusted each modality).;
+note right
+  **Weighted Sum Details:**
+  
+  **What we're combining:**
+  • speech_64d [64 numbers] ← Output from speech CNN encoder
+  • handwriting_64d [64 numbers] ← Output from handwriting CNN encoder  
+  • gait_64d [64 numbers] ← Output from gait CNN encoder
+  
+  **Position-by-position calculation:**
+  For each of the 64 positions:
+  fused[i] = 0.55×speech_64d[i] + 0.15×handwriting_64d[i] + 0.30×gait_64d[i]
+  
+  **Example for position 1:**
+  fused[0] = 0.55×0.2 + 0.15×1.1 + 0.30×0.5 = 0.425
+  
+  **Result:** One 64-d vector that's a smart combination of all three modalities,
+  with each modality contributing based on its learned importance.
+end note
+
+|#E8F8E8|**4. DENSE CLASSIFIER**\n(Convert fused vector to final prediction)|
+
+note left
+  **What dense classifier does:**
+  • Takes the combined information (64 numbers)
+  • Makes the final medical decision
+  • Layer 1: Look for high-level disease patterns
+  • Layer 2: Make final yes/no judgment
+  • Like the final step where all evidence gets evaluated
+  • Output: Raw confidence score (logit)
+end note
+:Input: **Fused vector** [64 numbers] from attention fusion;
+
+:**Layer 1:** Linear(64→32) + ReLU + Dropout(0.3);
+:Takes 64-d fused vector → reduces to 32 numbers\nReLU removes negatives, Dropout prevents overfitting;
+
+:**Layer 2:** Linear(32→1);  
+:Takes 32 numbers → produces 1 raw score (called **logit**);
+
+note right
+  **Dense Classifier Details:**
+  
+  **Why "Dense":** Each input connects to every output (fully connected layers)
+  
+  **Step-by-step example:**
+  Fused vector [0.425, 1.02, 0.025, ..., 64 numbers total]
+       ↓
+  Linear(64→32): Matrix multiplication + bias → [32 numbers]  
+  ReLU: Remove negatives → [32 non-negative numbers]
+  Dropout: Randomly zero 30% → [32 numbers, some zeroed]
+       ↓
+  Linear(32→1): Final multiplication → **logit = 1.2** (raw score)
+  
+  **Purpose:** Transform combined multimodal information into single prediction score
+end note
+
+|#F0E8FF|**5. OUTPUT**\n(Final prediction and confidence)|
+
+note left
+  **What the user gets:**
+  • Clear yes/no answer: "Parkinson's" or "Healthy"
+  • Confidence level: How sure is the AI? (0-100%)
+  • Transparency: Which tests were most important?
+  • Explainability: Can see what the AI focused on
+  • Like getting a complete medical report with reasoning!
+end note
+:Apply **Sigmoid** to convert logit → probability;
+
+:Make final decision based on probability threshold;
+
+:Return complete results to user;
+
+note right
+  **Output Processing Details:**
+  
+  **Sigmoid conversion:**
+  Logit = 1.2 → Sigmoid = 1/(1+e^(-1.2)) = 0.77 (77% probability)
+  
+  **Decision making:**
+  • If probability ≥ 0.5 → **Parkinson's detected**
+  • If probability < 0.5 → **Healthy**
+  • Example: 0.77 ≥ 0.5 → **Parkinson's**
+  
+  **Complete user output:**
+  • Prediction: "Parkinson's" or "Healthy"  
+  • Confidence: 77% (the probability)
+  • Attention weights: [0.55, 0.15, 0.30] (how much each modality contributed)
+  • Optional: Grad-CAM heatmaps, SE channel weights for explainability
+  
+  **Why Sigmoid:** Converts any real number to probability between 0 and 1
+  Formula: sigmoid(x) = 1/(1+e^(-x))
+end note
+
+note right
+  **THE BIG PICTURE:**
+  Raw files → Numbers → Pattern recognition → Smart combination → Medical decision → Clear answer
+  
+  **Key insight:** The AI mimics how human doctors work:
+  • Analyze different types of tests (speech, handwriting, walking)  
+  • Look for patterns and symptoms in each
+  • Weigh the evidence (some tests might be more telling)
+  • Make an informed diagnosis based on all available data
+  • Provide confidence and reasoning
+  
+  **Result:** Fast, consistent, and explainable Parkinson's screening!
+  
+  ----
+  
+  **HOW WE TRAIN THIS MODEL:**
+  
+  **Training uses the exact same steps shown above, but with learning:**
+  • Forward pass: Run data through all steps (feature extraction → encoders → attention → classifier → prediction)
+  • Calculate loss: Compare prediction with true label (Parkinson's or Healthy)
+  • Backward pass: Compute gradients to see how to improve each weight
+  • Update weights: Adjust all filters and parameters to reduce errors
+  • Repeat: Do this for thousands of examples until the model gets very accurate
+  
+  **What gets learned:** All the weights in Conv1d filters, Linear layers, attention scoring, etc.
+  **Training data:** Thousands of audio/image/video files with known diagnoses
+  **Result:** A trained model that can accurately predict Parkinson's from new, unseen data
+end note
+
+stop
+
+@enduml

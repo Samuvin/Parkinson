@@ -1,0 +1,157 @@
+@startuml Parkinson_Prediction_Workflow
+title Parkinson's Disease Prediction System - End-to-End Workflow\n(Upload -> Feature Extraction -> Prediction)
+
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 12
+skinparam ArrowColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam PartitionBorderColor black
+skinparam PartitionBackgroundColor white
+
+|**User / Client**|
+start
+:User chooses input type;
+note right: Audio OR Handwriting image OR Gait video OR Combined video
+
+|**Upload and Validation**|
+if (Input type?) then (Audio)
+  :POST /api/upload/audio;
+  :Validate file, extension, size;
+elseif (Handwriting)
+  :POST /api/upload/handwriting;
+  :Validate file, extension, size;
+elseif (Gait video)
+  :POST /api/upload/gait;
+  :Validate file, extension, size;
+else (Combined video)
+  :POST /api/process_combined_video;
+  :Validate video + flags;
+endif
+
+if (Validation OK?) then (yes)
+  :Continue;
+else (no)
+  :Return 400 error;
+  stop
+endif
+
+:Save file to temporary path;
+
+|**Feature Extraction**|
+if (Modality?) then (Voice)
+  :Extract Voice - 22 features;
+  :Return speech_features;
+elseif (Handwriting)
+  :Extract Handwriting - 10 features;
+  :Return handwriting_features;
+elseif (Gait)
+  :Extract Gait - 10 features;
+  :Return gait_features;
+else (Combined)
+  fork
+    :Extract audio to WAV; Speech -> 22 values;
+  fork again
+    :Extract middle frame; Handwriting -> 10 values;
+  fork again
+    :Gait from video -> 10 values;
+  end fork
+  :Merge all features;
+endif
+
+:Delete temporary files;
+:Return JSON with features;
+
+|**User / Client**|
+:Client receives features;
+:Client calls Predict;
+
+|**Prediction API**|
+:POST /api/predict;
+:Body: speech, handwriting, gait features;
+
+:Validate at least one modality;
+if (Counts correct?) then (yes)
+  :Counts OK;
+else (no)
+  :Return 400;
+  stop
+endif
+
+:Build vectors;
+
+|**Model Layer**|
+if (DL model available?) then (yes)
+  :Advanced AI - SE-ResNet + Attention;
+  :Return label, confidence, probabilities;
+else (no)
+  :ML fallback - SVM/LR;
+  :Return label, confidence, probabilities;
+endif
+
+|**Prediction API**|
+:Save to DB if authenticated;
+:Return 200 JSON result;
+
+|**User / Client**|
+:Display result to user;
+stop
+
+@enduml
+
+' =============================================================================
+' Diagram 2: Video to Gait - Extraction Steps (B&W)
+' =============================================================================
+@startuml Gait_Extraction_Detail
+title Video to Gait - Extraction Steps
+
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 11
+skinparam ArrowColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+
+start
+:Walking video;
+:Open video, read frames (max 300);
+:Grayscale and blur;
+:Frame difference -> motion per frame;
+:Array of motion values;
+:Detect steps (peaks);
+:Step intervals -> stride_interval, stride_interval_std;
+:Swing and stance from motion;
+:Cadence, gait_speed, step_length;
+:stride_regularity, gait_asymmetry;
+:Return 10 gait features;
+stop
+
+@enduml
+
+' =============================================================================
+' Diagram 3: Image to Handwriting - Extraction Steps (B&W)
+' =============================================================================
+@startuml Handwriting_Extraction_Detail
+title Image to Handwriting - Extraction Steps
+
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 11
+skinparam ArrowColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+
+start
+:Handwriting or drawing image;
+:Load, grayscale, binarize;
+:Stroke widths -> mean_pressure, std_pressure;
+:Contour smoothness -> velocity, acceleration;
+:Connected components -> pen_up_time;
+:Stroke length, writing_tempo;
+:Skeleton and line fit -> tremor_frequency;
+:Smoothness + tremor -> fluency_score;
+:Return 10 handwriting features;
+stop
+
+@enduml
