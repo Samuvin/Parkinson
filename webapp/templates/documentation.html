@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Documentation - Parkinson's Disease Prediction{% endblock %}
+{% block title %}Documentation - Parkinson's Disease Detection{% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="mb-4 fade-in-up">
         <h1 class="section-title"><i class="fas fa-book" style="color:var(--accent)"></i> API Documentation</h1>
-        <p class="section-subtitle text-start" style="max-width:none">Complete reference for the PD Prediction API</p>
+        <p class="section-subtitle text-start" style="max-width:none">Complete reference for the PD Detection API</p>
     </div>
 
     <!-- Overview -->
@@ -15,9 +15,9 @@
             <div class="card-body p-4">
                 <h3>API Overview</h3>
                 <p>
-                    The Parkinson's Disease Prediction API provides endpoints for making predictions
+                    The Parkinson's Disease Detection API provides endpoints for making detections
                     using advanced AI models with attention-based multimodal fusion.
-                    When advanced AI models are available, predictions include explainability data (attention weights,
+                    When advanced AI models are available, detections include explainability data (attention weights,
                     Grad-CAM feature importance, SE channel weights). All endpoints return JSON responses.
                 </p>
                 <p class="mb-0">
@@ -72,7 +72,7 @@
                 </div>
             </div>
             <div class="card-body p-4" id="predict-content">
-                <p><strong>Description:</strong> Make a prediction for a single sample. At least one modality must be provided. Advanced AI models are used when available; otherwise falls back to standard machine learning.</p>
+                <p><strong>Description:</strong> Make a detection for a single sample. At least one modality must be provided. Advanced AI models are used when available; otherwise falls back to standard machine learning.</p>
 
                 <h6>Request:</h6>
                 <div style="position:relative">
@@ -129,7 +129,7 @@
                 </div>
             </div>
             <div class="card-body p-4" id="batch-content" style="display:none">
-                <p><strong>Description:</strong> Batch predictions for multiple samples.</p>
+                <p><strong>Description:</strong> Batch detections for multiple samples.</p>
                 <h6>Request:</h6>
                 <div style="position:relative">
                     <button class="code-copy-btn" onclick="copyCode(this)"><i class="fas fa-copy"></i> Copy</button>
@@ -218,7 +218,7 @@ data = {
 response = requests.post(url, json=data)
 result = response.json()
 
-print(f"Prediction: {result['prediction_label']}")
+print(f"Detection: {result['prediction_label']}")
 print(f"Confidence: {result['confidence']:.2%}")
 print(f"Model: {result.get('model_type', 'sklearn')}")
 if 'attention_weights' in result:
@@ -263,7 +263,7 @@ if 'attention_weights' in result:
 })
 .then(res => res.json())
 .then(data => {
-  console.log('Prediction:', data.prediction_label);
+  console.log('Detection:', data.prediction_label);
   console.log('Confidence:', data.confidence);
   console.log('Model:', data.model_type);
   if (data.attention_weights) {

@@ -37,7 +37,7 @@
     /* ------------------------------------------------------------------ */
 
     // Pages that anyone can see without logging in.
-    var publicPaths = ['/', '/login', '/about', '/results'];
+    var publicPaths = ['/', '/login', '/about', '/results', '/predict_page'];
 
     function isPublicPage() {
         var path = window.location.pathname.replace(/\/+$/, '') || '/';

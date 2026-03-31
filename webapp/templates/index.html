@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Home - Parkinson's Disease Prediction{% endblock %}
+{% block title %}Home - Parkinson's Disease Detection{% endblock %}
 
 {% block content %}
 <div class="container">
@@ -10,16 +10,16 @@
         <div class="col-lg-6 mb-4 mb-lg-0 fade-in-up">
             <div class="chip chip-accent mb-3"><i class="fas fa-brain"></i> Advanced AI Model</div>
             <h1 class="hero-title mb-3">
-                Early Prediction of<br>
+                Early Detection of<br>
                 <span class="text-gradient">Parkinson's Disease</span>
             </h1>
             <p class="section-subtitle text-start mt-3 mb-4" style="max-width:none">
                 Multimodal AI system analyzing speech, handwriting, and gait patterns
-                for accurate and explainable early prediction.
+                for accurate and explainable early detection.
             </p>
             <div class="d-flex flex-wrap gap-3 mt-4">
                 <a href="{{ url_for('predict_page') }}" class="btn btn-accent btn-lg glow-pulse">
-                    <i class="fas fa-play-circle"></i> Start Prediction
+                    <i class="fas fa-play-circle"></i> Start Detection
                 </a>
                 <a href="{{ url_for('about') }}" class="btn btn-outline-glass btn-lg">
                     Learn More <i class="fas fa-arrow-right" style="font-size:.8rem"></i>
@@ -62,25 +62,18 @@
 
     <!-- Stats Row -->
     <section class="row g-3 mb-5 fade-in-up fade-in-up-d1">
-        <div class="col-4 col-md-4">
+        <div class="col-6 col-md-6">
             <div class="stat-card">
                 <div class="stat-value text-gradient">42</div>
                 <div class="stat-label">Features</div>
                 <div class="stat-sub">Across 3 modalities</div>
             </div>
         </div>
-        <div class="col-4 col-md-4">
+        <div class="col-6 col-md-6">
             <div class="stat-card">
                 <div class="stat-value text-gradient">3</div>
                 <div class="stat-label">Modalities</div>
                 <div class="stat-sub">Speech, Writing, Gait</div>
-            </div>
-        </div>
-        <div class="col-4 col-md-4">
-            <div class="stat-card">
-                <div class="stat-value text-gradient">XAI</div>
-                <div class="stat-label">Explainable</div>
-                <div class="stat-sub">Grad-CAM & Attention</div>
             </div>
         </div>
     </section>
@@ -89,7 +82,7 @@
     <section class="mb-5">
         <div class="text-center mb-4 fade-in-up">
             <h2 class="section-title">Multimodal Analysis</h2>
-            <p class="section-subtitle">Three data modalities for comprehensive prediction</p>
+            <p class="section-subtitle">Three data modalities for comprehensive detection</p>
         </div>
 
         <div class="row g-4">
@@ -98,7 +91,7 @@
                     <div class="card-body text-center p-4">
                         <div class="icon-badge icon-badge-lg accent d-inline-flex"><i class="fas fa-microphone" style="margin:0"></i></div>
                         <h5 class="mt-2 mb-2">Speech Analysis</h5>
-                        <p class="small">Analyzes 22 acoustic features including jitter, shimmer, and harmonics-to-noise ratio to predict vocal patterns associated with PD.</p>
+                        <p class="small">Analyzes 22 acoustic features including jitter, shimmer, and harmonics-to-noise ratio to detect vocal patterns associated with PD.</p>
                     </div>
                 </div>
             </div>
@@ -116,7 +109,7 @@
                     <div class="card-body text-center p-4">
                         <div class="icon-badge icon-badge-lg warning d-inline-flex"><i class="fas fa-walking" style="margin:0"></i></div>
                         <h5 class="mt-2 mb-2">Gait Analysis</h5>
-                        <p class="small">Examines 10 walking parameters including stride intervals, cadence, and gait variability to predict movement abnormalities.</p>
+                        <p class="small">Examines 10 walking parameters including stride intervals, cadence, and gait variability to detect movement abnormalities.</p>
                     </div>
                 </div>
             </div>
@@ -127,7 +120,7 @@
     <section class="mb-5">
         <div class="text-center mb-4 fade-in-up">
             <h2 class="section-title">Under the Hood</h2>
-            <p class="section-subtitle">Advanced AI architecture with attention mechanisms and real clinical data</p>
+            <p class="section-subtitle">SE-ResNet with attention fusion and dual-mode deployment architecture</p>
         </div>
 
         <div class="row g-4">
@@ -136,12 +129,11 @@
                     <div class="card-body p-4">
                         <h5 class="mb-3"><span class="icon-badge icon-badge-sm accent me-2"><i class="fas fa-brain" style="margin:0"></i></span> AI Architecture</h5>
                         <ul class="mt-3 mb-0">
-                            <li><strong>Algorithm:</strong> Advanced Neural Network</li>
-                            <li><strong>Encoders:</strong> 3 per-modality processing networks</li>
-                            <li><strong>Fusion:</strong> Attention-based modality weighting</li>
-                            <li><strong>Dual Attention:</strong> Feature + modality level</li>
-                            <li><strong>Explainability:</strong> Feature importance + attention visualization</li>
-                            <li><strong>Framework:</strong> Advanced ML with SMOTE balancing</li>
+                            <li><strong>Algorithm:</strong> SE-ResNet 1D + Attention Fusion</li>
+                            <li><strong>Encoders:</strong> Per-modality SE-ResNet1D networks</li>
+                            <li><strong>Fusion:</strong> Learned attention-based modality weighting</li>
+                            <li><strong>SE Blocks:</strong> Squeeze-and-Excitation channel attention</li>
+                            <li><strong>Framework:</strong> PyTorch with sklearn fallback + SMOTE</li>
                         </ul>
                     </div>
                 </div>
@@ -152,11 +144,10 @@
                         <h5 class="mb-3"><span class="icon-badge icon-badge-sm success me-2"><i class="fas fa-chart-bar" style="margin:0"></i></span> Key Capabilities</h5>
                         <ul class="mt-3 mb-0">
                             <li><strong>42 Features:</strong> Speech (22) + Handwriting (10) + Gait (10)</li>
-                            <li><strong>Residual Learning:</strong> Skip connections for deep training</li>
-                            <li><strong>Channel Attention:</strong> SE blocks learn feature importance</li>
-                            <li><strong>Modality Attention:</strong> Dynamic per-patient weighting</li>
-                            <li><strong>Grad-CAM:</strong> Visual feature explanations</li>
-                            <li><strong>Real Data:</strong> UCI, PaHaW, PhysioNet datasets</li>
+                            <li><strong>Framework:</strong> PyTorch with sklearn ensemble</li>
+                            <li><strong>Residual Learning:</strong> Skip connections + batch normalization</li>
+                            <li><strong>Channel Attention:</strong> SE blocks with adaptive pooling</li>
+                            <li><strong>Modality Fusion:</strong> Softmax attention weights per patient</li>
                         </ul>
                     </div>
                 </div>
@@ -169,9 +160,9 @@
         <div class="card" style="background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.06));border-color:rgba(99,102,241,.15)">
             <div class="card-body text-center py-5">
                 <h3 class="mb-2" style="color:var(--text-1)">Ready to Get Started?</h3>
-                <p class="mb-4" style="color:var(--text-2)">Upload your data and get instant predictions with explainable AI insights.</p>
+                <p class="mb-4" style="color:var(--text-2)">Upload your data and get instant detection results with explainable AI insights.</p>
                 <a href="{{ url_for('predict_page') }}" class="btn btn-accent btn-lg glow-pulse">
-                    <i class="fas fa-play-circle"></i> Start Prediction
+                    <i class="fas fa-play-circle"></i> Start Detection
                 </a>
             </div>
         </div>

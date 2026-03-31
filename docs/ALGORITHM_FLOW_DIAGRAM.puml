@@ -1,0 +1,193 @@
+@startuml Algorithm_Flow_Diagram
+title Parkinson's Prediction Algorithm - Technical Flow\n(SE-ResNet + Attention Fusion Architecture)
+
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 11
+skinparam ArrowColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam PartitionBorderColor black
+skinparam PartitionBackgroundColor #F8F9FA
+
+||**INPUT LAYER**|
+start
+
+:Raw Input Data;
+fork
+  :Audio File\n(.wav, .mp3);
+  :Feature Extraction\n(Parselmouth/Praat);
+  :22 Speech Features;
+  note right
+    F0, Fhi, Flo, Jitter(%, Abs, RAP, PPQ, DDP),
+    Shimmer(%, dB, APQ3, APQ5, APQ, DDA),
+    NHR, HNR, RPDE, DFA, spread1, spread2, D2, PPE
+  end note
+fork again
+  :Image File\n(.png, .jpg);
+  :Feature Extraction\n(OpenCV/PIL);
+  :10 Handwriting Features;
+  note right
+    mean_pressure, std_pressure, mean_velocity,
+    std_velocity, mean_acceleration, pen_up_time,
+    stroke_length, writing_tempo, tremor_frequency,
+    fluency_score
+  end note
+fork again
+  :Video File\n(.mp4, .avi);
+  :Feature Extraction\n(OpenCV Motion);
+  :10 Gait Features;
+  note right
+    stride_interval, stride_interval_std, swing_time,
+    stance_time, double_support, gait_speed, cadence,
+    step_length, stride_regularity, gait_asymmetry
+  end note
+end fork
+
+:Feature Scaling & Preprocessing;
+:Input Vectors: [22], [10], [10];
+
+||**SE-RESNET ENCODER LAYER**|
+
+fork
+  :**Speech Encoder**;
+  :Input Shape: [Batch, 1, 22];
+  
+  :**Stem Block**;
+  :Conv1d(1→32, kernel=3) + BatchNorm + ReLU;
+  :Shape: [Batch, 32, 22];
+  
+  :**Residual Block 1**;
+  :Conv1d(32→32) + BN + ReLU;
+  :Conv1d(32→32) + BN;
+  :**SE Module**;
+  :GlobalAvgPool1d → FC(32→8) → ReLU → FC(8→32) → Sigmoid;
+  :Channel attention weighting;
+  :Add skip connection + ReLU;
+  :Shape: [Batch, 32, 22];
+  
+  :**Residual Block 2**;
+  :Conv1d(32→64) + BN + ReLU;
+  :Conv1d(64→64) + BN;
+  :**SE Module**;
+  :GlobalAvgPool1d → FC(64→16) → ReLU → FC(16→64) → Sigmoid;
+  :Add skip connection + ReLU;
+  :Shape: [Batch, 64, 22];
+  
+  :**Global Pooling**;
+  :AdaptiveAvgPool1d(1);
+  :Shape: [Batch, 64, 1] → [Batch, 64];
+  
+  :**Output Linear**;
+  :Linear(64→64) + Dropout;
+  :Speech Embedding: [Batch, 64];
+
+fork again
+  :**Handwriting Encoder**;
+  :Input Shape: [Batch, 1, 10];
+  :**Same Architecture**;
+  :Stem → Block1 → Block2 → Pool → Linear;
+  :Handwriting Embedding: [Batch, 64];
+
+fork again
+  :**Gait Encoder**;
+  :Input Shape: [Batch, 1, 10];
+  :**Same Architecture**;
+  :Stem → Block1 → Block2 → Pool → Linear;
+  :Gait Embedding: [Batch, 64];
+end fork
+
+:Stack Embeddings: [Batch, 3, 64];
+
+||**ATTENTION FUSION LAYER**|
+
+:Attention Score Computation;
+fork
+  :Speech Embedding [64];
+  :Linear(64→32) → Tanh → Linear(32→1);
+  :Speech Score;
+fork again
+  :Handwriting Embedding [64];
+  :Linear(64→32) → Tanh → Linear(32→1);
+  :Handwriting Score;
+fork again
+  :Gait Embedding [64];
+  :Linear(64→32) → Tanh → Linear(32→1);
+  :Gait Score;
+end fork
+
+:Raw Scores: [speech_score, handwriting_score, gait_score];
+
+:Softmax Normalization;
+:attention_weights = Softmax(scores);
+:Weights sum to 1.0: [w_s, w_h, w_g];
+
+:Weighted Fusion;
+:fused = w_s × speech_emb + w_h × hand_emb + w_g × gait_emb;
+:Fused Embedding: [Batch, 64];
+
+note right
+  **Attention Mechanism:**
+  • Learns modality importance dynamically
+  • Handles missing modalities (zero weights)
+  • Provides interpretability
+  • Example: [0.55, 0.15, 0.30]
+end note
+
+||**CLASSIFICATION LAYER**|
+
+:Fused Embedding [64];
+
+:**Dense Layer 1**;
+:Linear(64→32) + ReLU + Dropout(0.3);
+:Intermediate Features: [Batch, 32];
+
+:**Dense Layer 2**;
+:Linear(32→1);
+:Raw Logit: [Batch, 1];
+
+:**Sigmoid Activation**;
+:probability = 1 / (1 + exp(-logit));
+:Probability: [Batch, 1] ∈ [0, 1];
+
+:**Binary Classification**;
+if (probability >= 0.5?) then (yes)
+  :Prediction = "Parkinson's" (1);
+else (no)
+  :Prediction = "Healthy" (0);
+endif
+
+||**OUTPUT LAYER**|
+
+:Final Results;
+note right
+  **Model Output:**
+  • prediction: "Parkinson's" | "Healthy"
+  • probability: 0.0 to 1.0
+  • confidence: probability value
+  • attention_weights: [w_speech, w_hand, w_gait]
+  • logit: raw score before sigmoid
+  • embeddings: for explainability (Grad-CAM)
+end note
+
+:Return Prediction Results;
+
+stop
+
+note bottom
+  **Algorithm Summary:**
+  1. **Feature Extraction**: Convert raw files to numerical features
+  2. **Parallel Encoding**: 3 SE-ResNet CNNs learn patterns independently
+  3. **Attention Fusion**: Smart combination based on learned importance
+  4. **Classification**: Dense layers make final Parkinson's/Healthy decision
+  5. **Interpretability**: Attention weights show which modalities were most important
+  
+  **Key Innovations:**
+  • SE blocks for channel attention within each modality
+  • Cross-modal attention for intelligent fusion
+  • Handles missing modalities gracefully
+  • End-to-end trainable architecture
+  • Clinically interpretable outputs
+end note
+
+@enduml

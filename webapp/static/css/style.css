@@ -1,5 +1,5 @@
 /* =================================================================
-   Parkinson's Disease Prediction System — v7.0 Full Redesign
+   Parkinson's Disease Detection System — v7.0 Full Redesign
    Modern dark medical-tech aesthetic
    ================================================================= */
 
@@ -696,7 +696,7 @@ ul li{color:var(--text-2)}
     40%{transform:scale(1);opacity:1}
 }
 
-/* Full-screen prediction loader overlay */
+/* Full-screen detection loader overlay */
 .predict-loader-overlay {
     position: fixed;
     inset: 0;

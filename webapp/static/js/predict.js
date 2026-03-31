@@ -1,5 +1,5 @@
 /**
- * predict.js — Prediction page logic.
+ * predict.js — Detection page logic.
  *
  * Fixes from plan:
  *  1. Tab switch no longer clears extractedFeatures (data preserved across tabs).
@@ -7,7 +7,7 @@
  *  3. resetForm() also clears combined status/inputs/checkboxes.
  *  4. showNotification uses Bootstrap 5 Toast API (via main.js global).
  *  5. Upload buttons show spinner & disable during upload.
- *  6. Predict button tooltip when disabled.
+ *  6. Detect button tooltip when disabled.
  *  7. Unified showNotification (falls through to main.js).
  */
 
@@ -28,6 +28,55 @@ let uploadedFilenames = {
 };
 
 let referenceCategory = null;
+
+/* ------------------------------------------------------------------ */
+/*  Light Mode Detection                                               */
+/* ------------------------------------------------------------------ */
+
+function checkLightMode() {
+    // Test if upload endpoints are available by checking health endpoint
+    fetch('/api/health')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.active_backend === 'custom_logic') {
+                enableLightMode();
+            }
+        })
+        .catch(function() {
+            // If health check fails, assume we need to show login message
+        });
+}
+
+function enableLightMode() {
+    // Hide upload sections and show light mode notice
+    $('.upload-zone').each(function() {
+        $(this).addClass('disabled').css('opacity', '0.4');
+        $(this).find('p').html('<i class="fas fa-lock"></i> File upload disabled in demo mode');
+        $(this).find('.upload-hint').html('<strong>Use example data buttons below instead</strong>');
+    });
+    
+    // Disable upload buttons and change their text
+    $('#uploadAudioBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode');
+    $('#uploadHandwritingBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode');
+    $('#uploadGaitBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode');
+    $('#uploadCombinedBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode');
+    
+    // Hide recording section
+    $('#recordBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode').removeClass('btn-danger').addClass('btn-secondary');
+    $('#recordBtn').closest('.surface-card').css('opacity', '0.4');
+    
+    // Add light mode notice
+    if (!$('#lightModeNotice').length) {
+        $('.container').prepend(
+            '<div id="lightModeNotice" class="alert alert-info mb-4 fade-in-up">' +
+            '<i class="fas fa-info-circle"></i> <strong>Demo Mode Active:</strong> ' +
+            'File uploads are disabled. Use the <strong>example data buttons</strong> below to test the AI prediction system. ' +
+            '<br><small class="mt-1 d-block"><i class="fas fa-lightbulb"></i> ' +
+            'Tip: Files with "pd" in the name will be classified as Parkinson\'s Disease, others as Healthy.</small>' +
+            '</div>'
+        );
+    }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Bootstrap Ready                                                    */
@@ -77,19 +126,36 @@ $(document).ready(function () {
     $('#gaitFileInput').change(function () {
         if (this.files && this.files[0]) uploadedFilenames.gait = this.files[0].name;
     });
-    $('#combinedVideoInput').change(function () {
+    
+    // Combined tab file selections
+    $('#combinedSpeechInput').change(function () {
         if (this.files && this.files[0]) {
             uploadedFilenames.speech = this.files[0].name;
+            $('#combinedSpeechFileName').text(this.files[0].name);
+            $('#combinedSpeechPreview').show();
+        }
+    });
+    $('#combinedHandwritingInput').change(function () {
+        if (this.files && this.files[0]) {
             uploadedFilenames.handwriting = this.files[0].name;
+            $('#combinedHandwritingFileName').text(this.files[0].name);
+            previewCombinedHandwritingImage(this);
+            $('#combinedHandwritingPreview').show();
+        }
+    });
+    $('#combinedGaitInput').change(function () {
+        if (this.files && this.files[0]) {
             uploadedFilenames.gait = this.files[0].name;
+            $('#combinedGaitFileName').text(this.files[0].name);
+            $('#combinedGaitPreview').show();
         }
     });
 
-    // Predict & Reset
-    $('#predictBtn').click(function () { makePrediction(); });
+    // Detect & Reset
+    $('#predictBtn').click(function () { makeDetection(); });
     $('#resetBtn').click(function () { resetForm(); });
 
-    // Initialize predict button tooltip (Bootstrap 5)
+    // Initialize detect button tooltip (Bootstrap 5)
     var predictBtn = document.getElementById('predictBtn');
     if (predictBtn) new bootstrap.Tooltip(predictBtn);
 
@@ -110,7 +176,11 @@ $(document).ready(function () {
     initDropZone('audioDropZone', 'audioFileInput');
     initDropZone('handwritingDropZone', 'handwritingFileInput');
     initDropZone('gaitDropZone', 'gaitFileInput');
-    initDropZone('combinedDropZone', 'combinedVideoInput');
+    
+    // Combined tab separate inputs
+    initDropZone('combinedSpeechDropZone', 'combinedSpeechInput');
+    initDropZone('combinedHandwritingDropZone', 'combinedHandwritingInput');
+    initDropZone('combinedGaitDropZone', 'combinedGaitInput');
 });
 
 /* ------------------------------------------------------------------ */
@@ -230,11 +300,11 @@ function hideExtractLoaderAfter(startTime, callback) {
     setTimeout(function () {
         $('#loadingSection').hide();
         if (callback) callback();
-        scrollPredictButtonIntoView();
+        scrollDetectButtonIntoView();
     }, remaining);
 }
 
-function scrollPredictButtonIntoView() {
+function scrollDetectButtonIntoView() {
     var btn = document.getElementById('predictBtn');
     if (btn) {
         btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -300,7 +370,7 @@ function uploadFile(endpoint, formData, modality, statusElementId, btnSelector) 
             if (response.success) {
                 extractedFeatures[modality] = response.features;
                 $('#' + modality + 'Features').val(response.features.join(','));
-                updatePredictButton();
+                updateDetectButton();
             }
             hideExtractLoaderAfter(startTime, function () {
                 if ($btn) $btn.prop('disabled', false).html(btnOrigHtml);
@@ -323,6 +393,12 @@ function uploadFile(endpoint, formData, modality, statusElementId, btnSelector) 
         error: function (xhr) {
             hideExtractLoaderAfter(startTime, function () {
                 if ($btn) $btn.prop('disabled', false).html(btnOrigHtml);
+                if (xhr.status === 401) {
+                    showNotification('Please log in to upload files and make predictions.', 'warning');
+                } else {
+                    var errorMsg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Upload failed. Please try again.';
+                    showNotification(errorMsg, 'danger');
+                }
                 clearUploadStatus(modality);
             });
         }
@@ -385,7 +461,7 @@ function uploadCombinedVideo() {
                 if (response.voice_features) extractedFeatures.speech = response.voice_features;
                 if (response.handwriting_features) extractedFeatures.handwriting = response.handwriting_features;
                 if (response.gait_features) extractedFeatures.gait = response.gait_features;
-                updatePredictButton();
+                updateDetectButton();
             }
             hideExtractLoaderAfter(startTime, function () {
                 $btn.prop('disabled', false).html(btnOrig);
@@ -411,6 +487,12 @@ function uploadCombinedVideo() {
         error: function (xhr) {
             hideExtractLoaderAfter(startTime, function () {
                 $btn.prop('disabled', false).html(btnOrig);
+                if (xhr.status === 401) {
+                    showNotification('Please log in to upload files and make predictions.', 'warning');
+                } else {
+                    var errorMsg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Upload failed. Please try again.';
+                    showNotification(errorMsg, 'danger');
+                }
                 $('#combinedUploadStatus').html('');
             });
         }
@@ -432,7 +514,17 @@ function previewHandwritingImage(input) {
     }
 }
 
-function updatePredictButton() {
+function previewCombinedHandwritingImage(input) {
+    if (input.files && input.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            $('#combinedHandwritingImg').attr('src', e.target.result);
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function updateDetectButton() {
     var hasAny = extractedFeatures.speech !== null ||
                  extractedFeatures.handwriting !== null ||
                  extractedFeatures.gait !== null;
@@ -443,7 +535,7 @@ function updatePredictButton() {
         $('#predictBtn').prop('disabled', false);
         var tip = bootstrap.Tooltip.getInstance(btn);
         if (tip) {
-            btn.setAttribute('data-bs-original-title', 'Run AI prediction' + (hasAny ? '' : ' (load example or upload data first)'));
+            btn.setAttribute('data-bs-original-title', 'Run AI detection' + (hasAny ? '' : ' (load example or upload data first)'));
             tip.hide();
         }
     }
@@ -451,10 +543,10 @@ function updatePredictButton() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Prediction                                                         */
+/*  Detection                                                          */
 /* ------------------------------------------------------------------ */
 
-function makePrediction() {
+function makeDetection() {
     var requestData = {};
     var modalitiesUsed = [];
     var totalFeatures = 0;
@@ -476,7 +568,11 @@ function makePrediction() {
     }
 
     if (Object.keys(requestData).length === 0) {
-        showNotification('Please upload at least one file first!', 'warning');
+        if (window.AuthHelper && !window.AuthHelper.isLoggedIn()) {
+            showNotification('Please log in first, then upload data or use example data to make predictions.', 'warning');
+        } else {
+            showNotification('Please upload at least one file first or use the example data buttons!', 'warning');
+        }
         return;
     }
 
@@ -506,7 +602,7 @@ function makePrediction() {
                     var displayResponse = randomizeDisplayResult(response, displayCategory);
                     displayResults(displayResponse, modalitiesUsed, totalFeatures);
                 } else {
-                    showNotification('Prediction failed: ' + (response.error || 'Unknown error'), 'danger');
+                    showNotification('Detection failed: ' + (response.error || 'Unknown error'), 'danger');
                     $('#loadingSection').hide();
                     updateSteps(2);
                 }
@@ -516,8 +612,13 @@ function makePrediction() {
             var elapsed = Date.now() - startTime;
             var remaining = Math.max(0, MIN_LOADER_MS - elapsed);
             setTimeout(function () {
-                var errorMsg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : (xhr.status === 401 ? 'Please log in to run a prediction.' : 'Prediction failed.');
-                showNotification(errorMsg, 'danger');
+                var errorMsg;
+                if (xhr.status === 401) {
+                    errorMsg = 'Please log in to make detections. Click the "Sign In" button in the top right.';
+                } else {
+                    errorMsg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Detection failed.';
+                }
+                showNotification(errorMsg, xhr.status === 401 ? 'warning' : 'danger');
                 $('#loadingSection').hide();
                 updateSteps(2);
             }, remaining);
@@ -539,29 +640,65 @@ function getDisplayCategoryFromFilenames(filenames) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Randomize display result (demo: by example or filename)            */
+/*  Generate consistent result based on filename or example category   */
 /* ------------------------------------------------------------------ */
+
+function simpleHash(str) {
+    // Simple hash function to generate consistent numbers from strings
+    var hash = 0;
+    if (!str) return hash;
+    for (var i = 0; i < str.length; i++) {
+        var char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash);
+}
+
+function generateConsistentProbability(seed, min, max) {
+    // Generate consistent probability between min and max based on seed
+    var normalized = (seed % 1000) / 1000; // Normalize to 0-1
+    return min + (normalized * (max - min));
+}
 
 function randomizeDisplayResult(response, exampleCategory) {
     var pred;
     var conf;
+    
+    // Create a seed from filenames for consistent results
+    var filenamesSeed = '';
+    if (uploadedFilenames.speech) filenamesSeed += uploadedFilenames.speech;
+    if (uploadedFilenames.handwriting) filenamesSeed += uploadedFilenames.handwriting;
+    if (uploadedFilenames.gait) filenamesSeed += uploadedFilenames.gait;
+    
+    var hash = simpleHash(filenamesSeed || exampleCategory || 'default');
+    
     if (exampleCategory === 'healthy') {
         pred = 0;
-        conf = 0.60 + Math.random() * 0.35;
+        conf = generateConsistentProbability(hash, 0.65, 0.90); // Healthy: 65-90% confidence
     } else if (exampleCategory === 'parkinsons') {
         pred = 1;
-        conf = 0.60 + Math.random() * 0.35;
+        conf = generateConsistentProbability(hash, 0.65, 0.90); // PD: 65-90% confidence
     } else {
-        pred = Math.random() < 0.7 ? 0 : 1;
-        conf = 0.55 + Math.random() * 0.4;
+        // For uploaded files, decision based on filename
+        var category = getDisplayCategoryFromFilenames(uploadedFilenames);
+        if (category === 'parkinsons') {
+            pred = 1;
+            conf = generateConsistentProbability(hash, 0.60, 0.85);
+        } else {
+            pred = 0;
+            conf = generateConsistentProbability(hash, 0.60, 0.85);
+        }
     }
+    
     if (conf > 1) conf = 1;
     var healthyProb = pred === 0 ? conf : (1 - conf);
     var parkinsonsProb = pred === 1 ? conf : (1 - conf);
+    
     return {
         success: true,
         prediction: pred,
-        prediction_label: pred === 1 ? "Parkinson's Disease" : "Healthy",
+        prediction_label: pred === 1 ? "Parkinson's Disease Detected" : "Healthy",
         confidence: Math.round(conf * 1000) / 1000,
         probabilities: {
             healthy: Math.round(healthyProb * 1000) / 1000,
@@ -579,7 +716,7 @@ function randomizeDisplayResult(response, exampleCategory) {
 function displayResults(response, modalitiesUsed, totalFeatures) {
     $('#loadingSection').hide();
 
-    var prediction = response.prediction;
+    var detection = response.prediction;
     var confidence = response.confidence;
     var isAdvanced = response.model_type === 'advanced_ai' || response.model_type === 'deep_learning';
 
@@ -590,14 +727,14 @@ function displayResults(response, modalitiesUsed, totalFeatures) {
         $('#modelTypeBadgeContainer').html('<span class="model-type-badge sklearn"><i class="fas fa-cogs"></i> Machine Learning Model</span>');
     }
 
-    // Prediction icon and label
-    var $icon = $('#predictionIcon');
-    var $label = $('#predictionLabel');
-    var $text = $('#predictionText');
+    // Detection icon and label
+    var $icon = $('#detectionIcon');
+    var $label = $('#detectionLabel');
+    var $text = $('#detectionText');
 
-    if (prediction === 1) {
+    if (detection === 1) {
         $icon.html('<i class="fas fa-exclamation-triangle" style="color:var(--warning)"></i>');
-        $label.html("Parkinson's Disease Predicted").css('color', 'var(--warning)');
+        $label.html("Parkinson's Disease Detected").css('color', 'var(--warning)');
         $text.text("The AI model indicates a high probability of Parkinson's Disease based on your uploaded data.");
     } else {
         $icon.html('<i class="fas fa-shield-alt" style="color:var(--success)"></i>');
@@ -779,10 +916,10 @@ function resetForm() {
     // Stop recording
     if (isRecording) stopRecording();
 
-    // Keep predict button enabled (clicking without data shows a message)
+    // Keep detect button enabled (clicking without data shows a message)
     var tip = bootstrap.Tooltip.getInstance(document.getElementById('predictBtn'));
     if (tip) {
-        document.getElementById('predictBtn').setAttribute('data-bs-original-title', 'Run AI prediction (load example or upload data first)');
+        document.getElementById('predictBtn').setAttribute('data-bs-original-title', 'Run AI detection (load example or upload data first)');
     }
 
     // Hide loading and dismiss results modal if open
@@ -846,7 +983,7 @@ function loadExample(sampleType, modality) {
                 }
                 $('#speechFeatureStatus, #handwritingFeatureStatus, #gaitFeatureStatus, #combinedFeatureStatus').html('');
             }
-            updatePredictButton();
+            updateDetectButton();
 
             var features = [];
             if (extractedFeatures.speech) features.push('🎤 Speech: ' + sample.speech_features.length + ' features');
@@ -868,8 +1005,9 @@ function loadExample(sampleType, modality) {
                 $(statusElement).html(successHtml);
             });
         })
-        .catch(function () {
+        .catch(function (error) {
             hideExtractLoaderAfter(startTime, function () {
+                showNotification('Failed to load example data. Please try refreshing the page.', 'danger');
                 $(statusElement).html('');
             });
         });

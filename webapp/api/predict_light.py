@@ -41,7 +41,7 @@ def _custom_predict(speech_features=None, handwriting_features=None, gait_featur
     confidence = score if prediction == 1 else (1.0 - score)
     return {
         'prediction': prediction,
-        'prediction_label': "Parkinson's Disease" if prediction == 1 else "Healthy",
+        'prediction_label': "Parkinson's Disease Detected" if prediction == 1 else "Healthy",
         'confidence': round(confidence, 4),
         'probabilities': {
             'healthy': round(1.0 - score, 4),

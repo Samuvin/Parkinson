@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parkinson's Disease Prediction System - Updated Architecture</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            --primary: #2563eb;
+            --secondary: #7c3aed;
+            --accent: #06b6d4;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --dark: #1e293b;
+            --light: #f8fafc;
+            --gray: #64748b;
+            --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            color: var(--dark);
+            overflow-x: auto;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            color: white;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .architecture-flow {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .flow-section {
+            margin-bottom: 3rem;
+            position: relative;
+        }
+        
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+            padding-left: 1rem;
+            border-left: 4px solid var(--primary);
+        }
+        
+        .flow-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .flow-card {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .flow-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            border-color: var(--primary);
+        }
+        
+        .card-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+            margin-bottom: 1rem;
+        }
+        
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+        
+        .card-description {
+            font-size: 0.9rem;
+            color: var(--gray);
+            line-height: 1.5;
+        }
+        
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .tech-badge {
+            background: var(--primary);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .dual-mode {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .mode-card {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            border-radius: 16px;
+            padding: 2rem;
+            border: 3px solid #cbd5e1;
+            position: relative;
+        }
+        
+        .mode-card.full-mode {
+            border-color: var(--success);
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        }
+        
+        .mode-card.light-mode {
+            border-color: var(--warning);
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+        }
+        
+        .mode-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .architecture-details {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            color: white;
+            border-radius: 20px;
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .detail-card {
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .detail-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--accent);
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .feature-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .checkmark {
+            color: var(--success);
+            font-weight: bold;
+        }
+        
+        .flow-diagram {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            margin: 2rem 0;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        .diagram-svg {
+            width: 100%;
+            height: auto;
+            max-height: 800px;
+        }
+        
+        @media (max-width: 768px) {
+            .dual-mode {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 1rem;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧠 Parkinson's Disease Prediction System</h1>
+            <p>Advanced AI Architecture with SE-ResNet + Attention Fusion</p>
+        </div>
+        
+        <div class="flow-diagram">
+            <h2 class="section-title">📊 Updated System Flow Diagram</h2>
+            <svg class="diagram-svg" viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+                <!-- Background -->
+                <defs>
+                    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#f8fafc;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#e2e8f0;stop-opacity:1" />
+                    </linearGradient>
+                    
+                    <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+                    </linearGradient>
+                    
+                    <linearGradient id="successGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+                    </linearGradient>
+                    
+                    <linearGradient id="warningGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                
+                <!-- User Input -->
+                <rect x="50" y="50" width="200" height="80" rx="15" fill="url(#primaryGradient)" stroke="#1d4ed8" stroke-width="2"/>
+                <text x="150" y="85" text-anchor="middle" fill="white" font-size="14" font-weight="600">👤 User Authentication</text>
+                <text x="150" y="105" text-anchor="middle" fill="white" font-size="12">JWT + MongoDB</text>
+                
+                <!-- File Upload -->
+                <rect x="50" y="180" width="200" height="80" rx="15" fill="url(#primaryGradient)" stroke="#1d4ed8" stroke-width="2"/>
+                <text x="150" y="210" text-anchor="middle" fill="white" font-size="14" font-weight="600">📁 File Upload</text>
+                <text x="150" y="230" text-anchor="middle" fill="white" font-size="12">Audio/Image/Video</text>
+                <text x="150" y="245" text-anchor="middle" fill="white" font-size="11">OpenCV + Librosa</text>
+                
+                <!-- Feature Extraction -->
+                <rect x="350" y="180" width="200" height="80" rx="15" fill="url(#primaryGradient)" stroke="#1d4ed8" stroke-width="2"/>
+                <text x="450" y="210" text-anchor="middle" fill="white" font-size="14" font-weight="600">🔧 Feature Extraction</text>
+                <text x="450" y="230" text-anchor="middle" fill="white" font-size="12">42 Features Total</text>
+                <text x="450" y="245" text-anchor="middle" fill="white" font-size="11">Speech(22) + Hand(10) + Gait(10)</text>
+                
+                <!-- Dual Mode Decision -->
+                <rect x="650" y="100" width="200" height="60" rx="15" fill="url(#warningGradient)" stroke="#d97706" stroke-width="2"/>
+                <text x="750" y="125" text-anchor="middle" fill="white" font-size="14" font-weight="600">⚡ Mode Selection</text>
+                <text x="750" y="145" text-anchor="middle" fill="white" font-size="12">Full ML vs Light Demo</text>
+                
+                <!-- Full ML Mode -->
+                <rect x="500" y="300" width="250" height="120" rx="15" fill="url(#successGradient)" stroke="#059669" stroke-width="2"/>
+                <text x="625" y="325" text-anchor="middle" fill="white" font-size="14" font-weight="600">🚀 Full ML Mode</text>
+                <text x="625" y="345" text-anchor="middle" fill="white" font-size="12">SE-ResNet + Attention Fusion</text>
+                <text x="625" y="365" text-anchor="middle" fill="white" font-size="11">• Per-modality encoders</text>
+                <text x="625" y="380" text-anchor="middle" fill="white" font-size="11">• Attention weights</text>
+                <text x="625" y="395" text-anchor="middle" fill="white" font-size="11">• Grad-CAM explainability</text>
+                <text x="625" y="410" text-anchor="middle" fill="white" font-size="11">PyTorch + sklearn fallback</text>
+                
+                <!-- Light Mode -->
+                <rect x="800" y="300" width="250" height="120" rx="15" fill="url(#warningGradient)" stroke="#d97706" stroke-width="2"/>
+                <text x="925" y="325" text-anchor="middle" fill="white" font-size="14" font-weight="600">💡 Light/Demo Mode</text>
+                <text x="925" y="345" text-anchor="middle" fill="white" font-size="12">Custom Logic Only</text>
+                <text x="925" y="365" text-anchor="middle" fill="white" font-size="11">• Filename-based prediction</text>
+                <text x="925" y="380" text-anchor="middle" fill="white" font-size="11">• Mock confidence scores</text>
+                <text x="925" y="395" text-anchor="middle" fill="white" font-size="11">• Example data buttons</text>
+                <text x="925" y="410" text-anchor="middle" fill="white" font-size="11">No ML dependencies</text>
+                
+                <!-- Prediction Results -->
+                <rect x="650" y="500" width="200" height="80" rx="15" fill="url(#primaryGradient)" stroke="#1d4ed8" stroke-width="2"/>
+                <text x="750" y="530" text-anchor="middle" fill="white" font-size="14" font-weight="600">🎯 Prediction Results</text>
+                <text x="750" y="550" text-anchor="middle" fill="white" font-size="12">Probability + Confidence</text>
+                <text x="750" y="565" text-anchor="middle" fill="white" font-size="11">Attention Visualization</text>
+                
+                <!-- Results Storage -->
+                <rect x="950" y="500" width="200" height="80" rx="15" fill="url(#primaryGradient)" stroke="#1d4ed8" stroke-width="2"/>
+                <text x="1050" y="530" text-anchor="middle" fill="white" font-size="14" font-weight="600">💾 Results Storage</text>
+                <text x="1050" y="550" text-anchor="middle" fill="white" font-size="12">MongoDB History</text>
+                <text x="1050" y="565" text-anchor="middle" fill="white" font-size="11">User Sessions</text>
+                
+                <!-- Arrows -->
+                <!-- User to Upload -->
+                <path d="M 150 130 L 150 180" stroke="#1d4ed8" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+                
+                <!-- Upload to Feature Extraction -->
+                <path d="M 250 220 L 350 220" stroke="#1d4ed8" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+                
+                <!-- Feature Extraction to Mode Selection -->
+                <path d="M 550 220 Q 600 220 650 160" stroke="#1d4ed8" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+                
+                <!-- Mode Selection to Full ML -->
+                <path d="M 700 160 Q 650 200 625 300" stroke="#059669" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+                
+                <!-- Mode Selection to Light Mode -->
+                <path d="M 800 160 Q 850 200 925 300" stroke="#d97706" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+                
+                <!-- Both modes to Prediction -->
+                <path d="M 625 420 Q 650 450 750 500" stroke="#1d4ed8" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+                <path d="M 925 420 Q 900 450 850 540" stroke="#1d4ed8" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+                
+                <!-- Prediction to Storage -->
+                <path d="M 850 540 L 950 540" stroke="#1d4ed8" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+                
+                <!-- Arrow marker -->
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#1d4ed8"/>
+                    </marker>
+                </defs>
+                
+                <!-- Labels -->
+                <text x="600" y="50" text-anchor="middle" fill="#1d4ed8" font-size="18" font-weight="700">Parkinson's Disease Prediction System - Updated Flow</text>
+                <text x="600" y="750" text-anchor="middle" fill="#64748b" font-size="12">Advanced AI with SE-ResNet + Attention Fusion | Dual-Mode Architecture</text>
+            </svg>
+        </div>
+        
+        <div class="architecture-flow">
+            <div class="flow-section">
+                <h2 class="section-title">🚀 System Entry Point</h2>
+                <div class="flow-grid">
+                    <div class="flow-card">
+                        <div class="card-icon" style="background: var(--primary);">
+                            👤
+                        </div>
+                        <div class="card-title">User Authentication</div>
+                        <div class="card-description">
+                            JWT-based authentication with MongoDB user management. Secure login/registration system with bcrypt password hashing.
+                        </div>
+                        <div class="tech-stack">
+                            <span class="tech-badge">JWT</span>
+                            <span class="tech-badge">MongoDB</span>
+                            <span class="tech-badge">bcrypt</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flow-card">
+                        <div class="card-icon" style="background: var(--accent);">
+                            📁
+                        </div>
+                        <div class="card-title">File Upload & Processing</div>
+                        <div class="card-description">
+                            Multi-modal file upload: Audio files (speech), Images (handwriting), Videos (gait analysis) with real-time processing.
+                        </div>
+                        <div class="tech-stack">
+                            <span class="tech-badge">Flask</span>
+                            <span class="tech-badge">OpenCV</span>
+                            <span class="tech-badge">Librosa</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flow-card">
+                        <div class="card-icon" style="background: var(--secondary);">
+                            🔧
+                        </div>
+                        <div class="card-title">Feature Extraction</div>
+                        <div class="card-description">
+                            Extract 42 total features: Speech (22 acoustic), Handwriting (10 kinematic), Gait (10 temporal-spatial) using advanced signal processing.
+                        </div>
+                        <div class="tech-stack">
+                            <span class="tech-badge">NumPy</span>
+                            <span class="tech-badge">SciPy</span>
+                            <span class="tech-badge">scikit-learn</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flow-section">
+                <h2 class="section-title">🧠 Dual-Mode AI Architecture</h2>
+                <div class="dual-mode">
+                    <div class="mode-card full-mode">
+                        <div class="mode-title">
+                            <span>🚀</span> Full ML Mode
+                        </div>
+                        <div class="card-description">
+                            <strong>Primary:</strong> SE-ResNet with Attention Fusion<br>
+                            <strong>Fallback:</strong> sklearn ensemble (SVM + Logistic Regression)<br><br>
+                            
+                            <strong>Deep Learning Pipeline:</strong><br>
+                            • Per-modality SE-ResNet1D encoders<br>
+                            • Attention-based fusion layer<br>
+                            • Dense classifier with dropout<br>
+                            • Grad-CAM explainability<br><br>
+                            
+                            <strong>Features:</strong><br>
+                            • File upload processing<br>
+                            • Real-time feature extraction<br>
+                            • Model confidence scores<br>
+                            • Attention weight visualization
+                        </div>
+                        <div class="tech-stack">
+                            <span class="tech-badge">PyTorch</span>
+                            <span class="tech-badge">SE-ResNet</span>
+                            <span class="tech-badge">Attention</span>
+                            <span class="tech-badge">Grad-CAM</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mode-card light-mode">
+                        <div class="mode-title">
+                            <span>💡</span> Light/Demo Mode
+                        </div>
+                        <div class="card-description">
+                            <strong>Custom Logic:</strong> Rule-based prediction system<br>
+                            <strong>No Dependencies:</strong> No NumPy, PyTorch, or OpenCV<br><br>
+                            
+                            <strong>Demo Pipeline:</strong><br>
+                            • Filename-based classification<br>
+                            • Simulated confidence scores<br>
+                            • Mock feature importance<br>
+                            • Example data buttons<br><br>
+                            
+                            <strong>Use Cases:</strong><br>
+                            • Quick demonstrations<br>
+                            • Environments without ML libraries<br>
+                            • Testing UI/UX without model loading<br>
+                            • Educational purposes
+                        </div>
+                        <div class="tech-stack">
+                            <span class="tech-badge">Pure Python</span>
+                            <span class="tech-badge">Flask</span>
+                            <span class="tech-badge">Custom Logic</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flow-section">
+                <h2 class="section-title">📊 Prediction & Results</h2>
+                <div class="flow-grid">
+                    <div class="flow-card">
+                        <div class="card-icon" style="background: var(--success);">
+                            🎯
+                        </div>
+                        <div class="card-title">AI Prediction Engine</div>
+                        <div class="card-description">
+                            Multi-modal fusion with attention mechanisms. Outputs probability scores, confidence intervals, and interpretable results.
+                        </div>
+                    </div>
+                    
+                    <div class="flow-card">
+                        <div class="card-icon" style="background: var(--warning);">
+                            📈
+                        </div>
+                        <div class="card-title">Explainable AI</div>
+                        <div class="card-description">
+                            Grad-CAM feature importance, attention weights, and SE channel visualization for complete model interpretability.
+                        </div>
+                    </div>
+                    
+                    <div class="flow-card">
+                        <div class="card-icon" style="background: var(--danger);">
+                            💾
+                        </div>
+                        <div class="card-title">Results Storage</div>
+                        <div class="card-description">
+                            MongoDB storage for prediction history, user sessions, model performance tracking, and audit trails.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="architecture-details">
+            <h2 style="color: white; font-size: 2rem; margin-bottom: 1rem;">🏗️ Technical Architecture</h2>
+            
+            <div class="detail-grid">
+                <div class="detail-card">
+                    <div class="detail-title">🧠 SE-ResNet Architecture</div>
+                    <ul class="feature-list">
+                        <li><span class="checkmark">✓</span> 1D Convolutional layers for feature extraction</li>
+                        <li><span class="checkmark">✓</span> Residual connections with skip paths</li>
+                        <li><span class="checkmark">✓</span> Squeeze-and-Excitation channel attention</li>
+                        <li><span class="checkmark">✓</span> Per-modality encoders (Speech, Handwriting, Gait)</li>
+                        <li><span class="checkmark">✓</span> 64-dimensional embedding space</li>
+                    </ul>
+                </div>
+                
+                <div class="detail-card">
+                    <div class="detail-title">🔗 Attention Fusion</div>
+                    <ul class="feature-list">
+                        <li><span class="checkmark">✓</span> Learned modality importance weights</li>
+                        <li><span class="checkmark">✓</span> Softmax-normalized attention scores</li>
+                        <li><span class="checkmark">✓</span> Dynamic per-patient weighting</li>
+                        <li><span class="checkmark">✓</span> Interpretable attention visualization</li>
+                        <li><span class="checkmark">✓</span> Robust to missing modalities</li>
+                    </ul>
+                </div>
+                
+                <div class="detail-card">
+                    <div class="detail-title">🌐 Web Application</div>
+                    <ul class="feature-list">
+                        <li><span class="checkmark">✓</span> Flask + Waitress WSGI server</li>
+                        <li><span class="checkmark">✓</span> Bootstrap 5 responsive UI</li>
+                        <li><span class="checkmark">✓</span> JWT authentication middleware</li>
+                        <li><span class="checkmark">✓</span> RESTful API endpoints</li>
+                        <li><span class="checkmark">✓</span> Real-time prediction interface</li>
+                    </ul>
+                </div>
+                
+                <div class="detail-card">
+                    <div class="detail-title">📊 Data Processing</div>
+                    <ul class="feature-list">
+                        <li><span class="checkmark">✓</span> Multi-format file support (audio, image, video)</li>
+                        <li><span class="checkmark">✓</span> Real-time feature extraction</li>
+                        <li><span class="checkmark">✓</span> SMOTE oversampling for class balance</li>
+                        <li><span class="checkmark">✓</span> Standardization and normalization</li>
+                        <li><span class="checkmark">✓</span> Cross-validation and model selection</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

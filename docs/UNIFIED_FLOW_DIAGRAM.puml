@@ -1,0 +1,375 @@
+@startuml Unified_Parkinson_Prediction_Flow
+title Parkinson's Disease Prediction System - Unified Flow Diagram\n(User Journey + Algorithm Internal Architecture)
+
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 11
+skinparam ArrowColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam PartitionBorderColor black
+skinparam PartitionBackgroundColor #F8F9FA
+skinparam NoteFontSize 9
+
+||#E3F2FD|**USER INTERACTION LAYER**|
+start
+
+:User opens Parkinson's Detection System;
+
+:User logs in or registers;
+note right
+  Authentication via JWT
+  User session management
+  Access control
+end note
+
+:User navigates to prediction interface;
+
+:User selects input modality;
+note right
+  Options:
+  • Speech (audio file)
+  • Handwriting (image)
+  • Gait (video)
+  • Combined video
+  • Manual feature input
+end note
+
+||#FFF3E0|**DATA INPUT & VALIDATION LAYER**|
+
+if (Input type?) then (Audio File)
+  :POST /api/upload/audio;
+  :Validate audio file (format, size, duration);
+  if (Valid?) then (yes)
+    :Save temporary audio file;
+  else (no)
+    :Return error "Invalid audio file";
+    stop
+  endif
+elseif (Image File)
+  :POST /api/upload/handwriting;
+  :Validate image file (format, size, quality);
+  if (Valid?) then (yes)
+    :Save temporary image file;
+  else (no)
+    :Return error "Invalid image file";
+    stop
+  endif
+elseif (Video File)
+  :POST /api/upload/gait;
+  :Validate video file (format, size, duration);
+  if (Valid?) then (yes)
+    :Save temporary video file;
+  else (no)
+    :Return error "Invalid video file";
+    stop
+  endif
+elseif (Combined Video)
+  :POST /api/process_combined_video;
+  :Validate combined video + extraction flags;
+  if (Valid?) then (yes)
+    :Save temporary video file;
+  else (no)
+    :Return error "Invalid combined video";
+    stop
+  endif
+else (Manual Features)
+  :User inputs feature values directly;
+  :Validate feature counts and ranges;
+endif
+
+||#E8F5E8|**FEATURE EXTRACTION LAYER**|
+
+if (Processing type?) then (Audio Processing)
+  :Load audio using soundfile/librosa;
+  :Apply noise reduction and normalization;
+  :Extract using Parselmouth (Praat);
+  fork
+    :Fundamental Frequency Features;
+    :F0, Fhi, Flo;
+  fork again
+    :Voice Quality Features;
+    :Jitter (%, Abs, RAP, PPQ, DDP);
+    :Shimmer (%, dB, APQ3, APQ5, APQ, DDA);
+    :NHR, HNR;
+  fork again
+    :Nonlinear Dynamics Features;
+    :RPDE, DFA, spread1, spread2, D2, PPE;
+  end fork
+  :Combine into 22 speech features;
+  
+elseif (Image Processing)
+  :Load image using OpenCV/PIL;
+  :Convert to grayscale and binarize;
+  :Detect strokes and contours;
+  fork
+    :Pressure & Force Features;
+    :mean_pressure, std_pressure;
+  fork again
+    :Kinematic Features;
+    :mean_velocity, std_velocity, mean_acceleration;
+  fork again
+    :Temporal & Motor Features;
+    :pen_up_time, writing_tempo, stroke_length;
+    :tremor_frequency, fluency_score;
+  end fork
+  :Combine into 10 handwriting features;
+  
+elseif (Video Processing)
+  :Load video using OpenCV;
+  :Extract frames and convert to grayscale;
+  :Compute frame differences for motion;
+  :Detect step peaks and intervals;
+  fork
+    :Temporal Features;
+    :stride_interval, stride_interval_std;
+    :swing_time, stance_time, double_support;
+  fork again
+    :Spatial & Rhythm Features;
+    :step_length, gait_speed, cadence;
+    :stride_regularity, gait_asymmetry;
+  end fork
+  :Combine into 10 gait features;
+  
+elseif (Combined Video)
+  fork
+    :Extract audio track → WAV;
+    :Process audio → 22 speech features;
+  fork again
+    :Extract middle frame → Image;
+    :Process image → 10 handwriting features;
+  fork again
+    :Analyze full video → Motion;
+    :Process motion → 10 gait features;
+  end fork
+  :Combine all extracted features;
+  
+else (Manual Input)
+  :Use provided feature values;
+  :Validate feature counts (22/10/10);
+endif
+
+:Delete temporary files;
+:Return extracted features to client;
+
+note right
+  **Feature Extraction Results:**
+  • Speech: 22 numerical features
+  • Handwriting: 10 numerical features  
+  • Gait: 10 numerical features
+  • All features represent patterns that
+    can indicate Parkinson's symptoms
+end note
+
+||#F3E5F5|**MODEL PROCESSING LAYER**|
+
+:Client calls POST /api/predict with features;
+:Validate at least one modality provided;
+:Build input vectors for model;
+
+if (All three modalities?) then (yes)
+  :Use all three real feature vectors;
+  :speech_features [22], handwriting_features [10], gait_features [10];
+else (missing modalities)
+  :Zero-fill missing modalities;
+  :Missing speech → [0,0,0...] (22 zeros);
+  :Missing handwriting → [0,0,0...] (10 zeros);
+  :Missing gait → [0,0,0...] (10 zeros);
+endif
+
+:Apply feature scaling using saved scalers;
+:speech_scaled, handwriting_scaled, gait_scaled;
+
+note right
+  **Model Input Preparation:**
+  • Always 3 vectors: [22], [10], [10]
+  • Real data or zero-filled
+  • Scaled using training statistics
+  • Consistent input format for model
+end note
+
+||#E1F5FE|**SE-RESNET ENCODER LAYER**|
+
+:Pass scaled vectors to SE-ResNet 1D CNN encoders;
+
+fork
+  :**Speech Encoder**;
+  :Input: speech_scaled [1, 22];
+  :**Stem**: Conv1d(1→32) + BatchNorm + ReLU;
+  :Transform input into 32 feature maps;
+  
+  :**Block 1**: Residual SE Block;
+  :Conv1d + BN + ReLU + Conv1d + BN;
+  :SE Module: GlobalAvgPool → FC(32→8) → ReLU → FC(8→32) → Sigmoid;
+  :Channel attention weighting;
+  :Add skip connection + ReLU;
+  
+  :**Block 2**: Residual SE Block (32→64);
+  :Conv1d(32→64) + BN + ReLU + Conv1d + BN;
+  :SE Module: GlobalAvgPool → FC(64→16) → ReLU → FC(16→64) → Sigmoid;
+  :Channel attention weighting;
+  :Add skip connection + ReLU;
+  
+  :**Pool & Linear**: AdaptiveAvgPool1d(1) → Linear(64→64);
+  :Output: **speech_embedding [64]**;
+
+fork again
+  :**Handwriting Encoder**;
+  :Input: handwriting_scaled [1, 10];
+  :**Stem**: Conv1d(1→32) + BatchNorm + ReLU;
+  :**Block 1**: Residual SE Block (32→32);
+  :**Block 2**: Residual SE Block (32→64);
+  :**Pool & Linear**: AdaptiveAvgPool1d(1) → Linear(64→64);
+  :Output: **handwriting_embedding [64]**;
+
+fork again
+  :**Gait Encoder**;
+  :Input: gait_scaled [1, 10];
+  :**Stem**: Conv1d(1→32) + BatchNorm + ReLU;
+  :**Block 1**: Residual SE Block (32→32);
+  :**Block 2**: Residual SE Block (32→64);
+  :**Pool & Linear**: AdaptiveAvgPool1d(1) → Linear(64→64);
+  :Output: **gait_embedding [64]**;
+end fork
+
+:Collect three 64-dimensional embeddings;
+:Stack embeddings → [3, 64] tensor;
+
+note right
+  **SE-ResNet Encoder Results:**
+  • 3 parallel encoders (same architecture)
+  • Each processes one modality independently
+  • Stem: Initial pattern detection
+  • Blocks: Deep feature learning with skip connections
+  • SE: Channel attention for important patterns
+  • Output: 3 × 64D embeddings (pattern summaries)
+end note
+
+||#FFF8E1|**ATTENTION FUSION LAYER**|
+
+:Compute attention scores for each embedding;
+
+fork
+  :speech_embedding [64] → Linear(64→32) → Tanh → Linear(32→1);
+  :Output: speech_score;
+fork again
+  :handwriting_embedding [64] → Linear(64→32) → Tanh → Linear(32→1);
+  :Output: handwriting_score;
+fork again
+  :gait_embedding [64] → Linear(64→32) → Tanh → Linear(32→1);
+  :Output: gait_score;
+end fork
+
+:Apply Softmax to scores;
+:attention_weights = Softmax([speech_score, handwriting_score, gait_score]);
+
+:Compute weighted fusion;
+:fused_embedding = Σ(attention_weights[i] × embeddings[i]);
+:Result: **fused_embedding [64]** + **attention_weights [3]**;
+
+note right
+  **Attention Fusion Process:**
+  • Score each modality's importance
+  • Convert scores to probabilities (sum=1.0)
+  • Weighted combination of embeddings
+  • Example weights: [0.55, 0.15, 0.30]
+  • Higher weight = more trusted modality
+  • Handles missing data automatically
+end note
+
+||#E8F8E8|**DENSE CLASSIFICATION LAYER**|
+
+:Input: fused_embedding [64];
+
+:**Layer 1**: Linear(64→32) + ReLU + Dropout(0.3);
+:Compress and add non-linearity;
+:Output: intermediate_features [32];
+
+:**Layer 2**: Linear(32→1);
+:Final classification layer;
+:Output: **logit** (raw prediction score);
+
+:Apply Sigmoid to convert logit to probability;
+:probability = 1 / (1 + exp(-logit));
+
+:Make binary decision using threshold;
+if (probability >= 0.5?) then (yes)
+  :prediction = "Parkinson's";
+else (no)
+  :prediction = "Healthy";
+endif
+
+:confidence = probability;
+
+note right
+  **Classification Process:**
+  • Dense layers for final decision
+  • Dropout prevents overfitting
+  • Sigmoid converts to probability [0,1]
+  • Threshold 0.5 for binary classification
+  • Confidence = raw probability value
+end note
+
+||#F0E8FF|**OUTPUT & RESPONSE LAYER**|
+
+:Prepare comprehensive response;
+
+:Build JSON response with:;
+note right
+  {
+    "prediction": "Parkinson's" | "Healthy",
+    "confidence": 0.85,
+    "probability": 0.85,
+    "attention_weights": {
+      "speech": 0.55,
+      "handwriting": 0.15,
+      "gait": 0.30
+    },
+    "features": {
+      "speech_features": [22 values],
+      "handwriting_features": [10 values],
+      "gait_features": [10 values]
+    },
+    "model_info": {
+      "model_type": "SE-ResNet + Attention",
+      "version": "1.0"
+    }
+  }
+end note
+
+:Save prediction to database (if authenticated);
+:Return 200 OK with prediction results;
+
+||#E3F2FD|**USER INTERFACE LAYER**|
+
+:Display results to user;
+
+:Show prediction with confidence;
+:Visualize attention weights (which tests were most important);
+:Display feature values used;
+:Provide explanation of results;
+
+note right
+  **User-Friendly Output:**
+  • Clear Parkinson's/Healthy result
+  • Confidence percentage (0-100%)
+  • Which tests contributed most
+  • Visual charts and explanations
+  • Option to save or share results
+end note
+
+:User can perform another prediction or logout;
+
+stop
+
+note bottom
+  **System Capabilities Summary:**
+  ✓ Handles 1, 2, or 3 modalities flexibly
+  ✓ Real-time feature extraction from raw files
+  ✓ Advanced AI with attention mechanism
+  ✓ Explainable results with confidence metrics
+  ✓ Secure, scalable web-based deployment
+  ✓ Clinical-grade accuracy and reliability
+end note
+
+@enduml

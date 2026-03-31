@@ -1,0 +1,171 @@
+3. METHODOLOGY
+
+3.1 System Architecture and Framework
+
+3.1.1 Multimodal Integration Design
+
+Our Parkinson's disease detection system combines three different types of patient assessments: speech recordings, handwriting samples, and walking videos. We built the system using a modular approach so it can work with any combination of these inputs - whether we have all three, just two, or even a single assessment type from a patient.
+
+The system processes data through several stages: first extracting meaningful features from each type of input, then using separate neural networks to learn patterns specific to speech, handwriting, and gait data. These learned representations are combined using an attention mechanism that automatically determines which assessment types are most informative for each individual patient case.
+
+This design mirrors how neurologists actually work in practice. When evaluating a patient, clinicians naturally give more weight to clearer, more reliable test results while still considering all available information. Our system does something similar - it learns to focus more on the assessment types that provide stronger diagnostic signals for each specific case. When certain assessments are missing or of poor quality, the system automatically compensates by relying more heavily on the available, higher-quality data.
+
+3.1.2 Processing Pipeline
+
+Our processing pipeline consists of five main steps that convert raw patient data into diagnostic detection results:
+
+1. **Data preprocessing**: We validate and standardize all input files to ensure consistent quality across different recording devices and conditions.
+
+2. **Feature extraction**: Each assessment type goes through specialized algorithms to extract relevant biomarkers - acoustic features from speech, motor control patterns from handwriting, and movement characteristics from gait videos.
+
+3. **Pattern learning**: Three separate SE-ResNet neural networks learn to recognize disease-related patterns specific to each assessment type.
+
+4. **Information fusion**: An attention mechanism combines the learned patterns, automatically determining the relative importance of each assessment type for the current patient.
+
+5. **Classification**: A final neural network layer produces a binary detection result (Parkinson's vs. healthy) along with confidence scores.
+
+We built robust error handling throughout the pipeline to deal with real-world challenges like corrupted files, missing assessments, or processing failures. The system can still provide useful detection results even when some components fail.
+
+3.1.3 Clinical Deployment Considerations
+
+We designed the system to work in various clinical settings, from small clinics to large hospitals. The modular architecture allows for easy scaling, and we included standard interfaces for integration with existing electronic health records. The system can process individual patients in real-time for immediate clinical detection or handle large batches for population screening programs.
+
+3.2 Feature Extraction Methods
+
+3.2.1 Speech Analysis
+
+We analyze speech recordings to detect vocal changes that often occur early in Parkinson's disease. Using Parselmouth and Praat software libraries, we extract 22 different acoustic features that capture various aspects of voice dysfunction.
+
+**Pitch Analysis**: We measure fundamental frequency (F0) characteristics including average pitch, maximum and minimum pitch values. These measurements help us understand how well patients can control their vocal cords and breathing - both areas commonly affected by Parkinson's disease. Our pitch tracking algorithms work reliably even when patients have vocal tremor or irregular voice patterns.
+
+**Voice Stability Measures**: We calculate several types of jitter (pitch variability) and shimmer (amplitude variability) measurements. Jitter features include percentage jitter, absolute jitter, relative average perturbation, pitch period quotient, and difference of differences calculations. These capture short-term variations in pitch that indicate problems with vocal cord control. Shimmer measurements look at variations in voice loudness, which can reveal breathing and vocal cord coordination issues.
+
+**Voice Quality Assessment**: We examine the balance between clear vocal sounds and background noise using harmonics-to-noise ratios and noise-to-harmonics ratios. These features are particularly sensitive to vocal cord problems and breathing difficulties.
+
+**Complex Voice Dynamics**: We also extract advanced features like recurrence period density entropy, detrended fluctuation analysis, and correlation dimension measures. These capture the complex, nonlinear aspects of voice changes in Parkinson's disease that simpler measures might miss.
+
+3.2.2 Handwriting Analysis
+
+We analyze handwriting samples to detect fine motor control problems that are common in Parkinson's disease. Using OpenCV and scikit-image libraries, we extract 10 features that quantify different aspects of motor dysfunction. The process starts with image preprocessing - converting to grayscale, reducing noise, and detecting individual pen strokes.
+
+**Pressure Analysis**: We estimate writing pressure by analyzing stroke thickness and darkness patterns. We calculate both average pressure and pressure variability, which help identify tremor-related fluctuations and inconsistent motor control that are typical signs of Parkinson's disease.
+
+**Movement Dynamics**: We measure writing speed and acceleration patterns to understand the temporal aspects of handwriting. Average velocity shows overall writing speed, while velocity variability indicates inconsistent motor control. Acceleration measurements reveal whether movements are smooth or jerky - patients with Parkinson's often show hesitant, irregular movement patterns.
+
+**Timing Features**: We track how long patients spend with their pen lifted off the paper (pen-up time), which can indicate planning difficulties or motor hesitation. We also measure overall writing rhythm and tempo, as timing control often deteriorates in Parkinson's disease.
+
+**Movement Quality**: Additional features include total stroke length, tremor frequency detection in writing trajectories, and overall fluency scores that assess writing smoothness. These features capture the progressive deterioration in fine motor control that occurs with disease advancement.
+
+3.2.3 Gait Analysis
+
+We analyze walking videos to detect movement problems characteristic of Parkinson's disease. Using OpenCV computer vision techniques, we extract 10 movement parameters that capture different aspects of walking dysfunction. Video preprocessing includes frame extraction and motion enhancement to ensure consistent analysis across different recording conditions.
+
+**Timing Measurements**: We measure stride intervals (the time for complete walking cycles) and calculate variability in these intervals, which indicates walking rhythm consistency. High variability often suggests motor control problems or freezing episodes. We also measure swing time (when each foot is in the air) and stance time (when each foot is on the ground), which provide insights into balance and lower limb function.
+
+**Balance Indicators**: We analyze double support phases - periods when both feet are on the ground simultaneously. Patients with Parkinson's often show extended double support phases as they compensate for balance problems and try to maintain stability while walking.
+
+**Movement Characteristics**: We measure step length and overall walking speed, which often decrease in Parkinson's disease due to bradykinesia (slowness of movement) and reduced movement amplitude. We also calculate walking cadence (steps per minute) and assess stride regularity.
+
+**Asymmetry Detection**: We look for left-right imbalances in walking patterns, which can indicate unilateral motor problems or compensatory strategies. Our step detection algorithms work reliably even with the shuffling gait and reduced foot clearance commonly seen in Parkinson's patients.
+
+3.3 Deep Learning Architecture
+
+3.3.1 Neural Network Design
+
+We use three parallel Squeeze-and-Excitation Residual Networks (SE-ResNets) to process the extracted features from each assessment type. While all three networks have the same architecture, they learn completely different patterns specific to speech, handwriting, and gait data.
+
+Each network starts with a stem layer that uses 1D convolution (kernel size 3) to transform the input features into 32 feature channels. We include batch normalization to keep training stable and ReLU activation for nonlinear processing.
+
+The main processing happens through two residual blocks that implement the SE-ResNet approach. Each block contains two convolutional layers with batch normalization and ReLU activations. The first block works with 32 feature channels to learn intermediate patterns, while the second block expands to 64 channels to capture more complex, high-level patterns that might indicate disease.
+
+3.3.2 Attention Mechanism
+
+Each residual block includes a Squeeze-and-Excitation (SE) module that helps the network focus on the most important feature channels. This works in two steps:
+
+**Squeeze Phase**: We use global average pooling to compress each feature channel into a single value that represents the overall importance of that channel.
+
+**Excitation Phase**: We use a small two-layer neural network to generate attention weights for each channel. The first layer reduces dimensionality by a factor of 16 (creating a bottleneck), uses ReLU activation, then the second layer expands back to the original size and applies sigmoid activation to keep weights between 0 and 1.
+
+These attention weights are multiplied with the original feature channels, creating an adaptive filter that emphasizes important patterns while suppressing noise or irrelevant features. This helps the network automatically learn which types of patterns are most useful for detecting Parkinson's disease in each assessment type.
+
+3.3.3 Residual Connections and Final Processing
+
+We use residual connections (skip connections) in each block to improve training efficiency and model performance. These connections allow gradients to flow directly from deeper layers back to earlier layers during training, which helps avoid the vanishing gradient problem common in deep networks. The residual design also lets each block learn incremental improvements rather than complete transformations, making training easier.
+
+When the number of feature channels changes between input and output, we use 1×1 convolutions to match dimensions for the residual addition. This maintains the benefits of residual learning while allowing the network to expand its representational capacity.
+
+At the end of each encoder, we use adaptive average pooling to convert variable-length feature sequences into fixed-size representations. This ensures consistent output dimensions regardless of input length variations. A final linear layer produces 64-dimensional embeddings that serve as compact representations of each assessment type's diagnostic information.
+
+3.4 Multimodal Fusion Strategy
+
+3.4.1 Attention Weight Calculation
+
+We combine information from all three assessment types using a learnable attention mechanism that automatically determines how much to rely on each type of assessment for individual patients. The attention module takes the 64-dimensional embeddings from each of the three SE-ResNet encoders and processes them through a scoring network to evaluate how informative and reliable each assessment is for the current case.
+
+The scoring network uses a two-layer architecture with tanh activations. First, each 64-dimensional embedding is projected to 32 dimensions through a linear layer. The tanh activation provides stable, bounded nonlinearity. Then a second linear layer reduces this to a single scalar score representing how much that assessment type should contribute to the final decision.
+
+We apply softmax normalization to these raw scores to create interpretable probability weights that sum to 1. This means the attention weights can be directly interpreted as percentage contributions from each assessment type. The softmax also creates competition between modalities - if one becomes more important, the others necessarily become less important, forcing the network to make explicit decisions about which information sources are most valuable for each patient.
+
+3.4.2 Information Integration
+
+We combine the three assessment embeddings using the calculated attention weights through a weighted linear combination. Each 64-dimensional embedding is multiplied by its attention weight, then all three are summed to create a single unified 64-dimensional representation that integrates diagnostic information from all available assessments.
+
+This approach automatically adapts to different clinical situations. For example, if a patient's speech shows clear signs of Parkinson's disease but their handwriting appears normal, the attention mechanism learns to rely more heavily on the speech assessment while giving less weight to the handwriting. This mimics how clinicians naturally focus more on clearer, more informative test results.
+
+The system handles missing assessments gracefully through our preprocessing approach. When an assessment type is unavailable, we fill it with zeros, which produces weak, uninformative embeddings. The attention mechanism naturally learns to assign very low weights to these empty embeddings while focusing on the available assessments that contain real diagnostic information.
+
+3.4.3 Clinical Interpretability
+
+The attention mechanism provides built-in explainability that helps clinicians understand how the system reaches its decisions. The attention weights show exactly how much each assessment type contributed to a particular diagnosis, which helps build trust and enables more informed clinical decision-making.
+
+Clinicians can see, for instance, that a diagnosis was based 60% on speech patterns, 30% on gait analysis, and 10% on handwriting. This transparency is crucial for clinical acceptance, as physicians need to understand the reasoning behind diagnostic suggestions.
+
+We can also analyze attention weight patterns across different patient groups to understand which assessment types are most useful for different disease stages, subtypes, or demographic groups. This information could help optimize clinical assessment protocols and inform practice guidelines.
+
+3.5 Classification and Output Generation
+
+3.5.1 Final Classification Network
+
+We convert the unified multimodal representation into diagnostic detection results using a two-layer neural network designed to balance accuracy with generalization. The first layer reduces the 64-dimensional fused embedding to 32 dimensions using a linear transformation, followed by ReLU activation and dropout (probability 0.3) to prevent overfitting. This layer learns to identify high-level diagnostic patterns from the combined multimodal information.
+
+The second layer produces a single output value (logit) that represents the raw classification score. Positive values indicate evidence for Parkinson's disease, while negative values suggest healthy classification. We use logits rather than direct probabilities because this provides more stable training and better numerical properties.
+
+For the final detection result, we apply sigmoid activation to convert the logit into a probability between 0 and 1, representing the estimated likelihood of Parkinson's disease. We use a threshold of 0.5 for binary classification - probabilities above 0.5 indicate Parkinson's disease, while those below suggest healthy classification. The system outputs both the binary decision and the continuous probability to provide comprehensive diagnostic information with confidence measures.
+
+3.5.2 Clinical Output and Reporting
+
+The system generates comprehensive reports designed to support clinical decision-making. Primary outputs include binary classification results indicating whether Parkinson's disease is detected or not detected, confidence scores providing probability values between 0 and 1, and attention weights showing the relative contribution of each assessment type including speech, handwriting, and gait to the final decision.
+
+These attention weights help clinicians understand which assessments were most influential, providing valuable context for interpretation and follow-up planning.
+
+We also provide access to intermediate representations and can generate gradient-based explanations using techniques like Grad-CAM to highlight specific features or time periods that most strongly influenced the diagnosis. These explainability features help build clinical trust and enable deeper analysis of the diagnostic reasoning.
+
+The output format is designed for easy integration with electronic health records and clinical workflow systems. The structured data can be automatically incorporated into patient documentation and clinical decision support systems, supporting both immediate decision-making and longitudinal tracking of patient assessments over time.
+
+3.6 Training and Optimization
+
+3.6.1 Training Framework
+
+We train the model using supervised learning with binary cross-entropy loss applied to the raw logit outputs. This approach provides numerical stability during training by avoiding explicit sigmoid computations that can cause gradient problems.
+
+For optimization, we use the Adam optimizer with an initial learning rate of 0.001 and exponential decay scheduling that gradually reduces the learning rate as training progresses. Adam's adaptive learning rates work well across the different parameter types in our multimodal architecture - from convolutional filters to attention weights to classification parameters.
+
+To prevent overfitting and improve generalization, we implement several regularization techniques. Dropout with 30% probability is applied in classification layers to prevent over-reliance on specific feature combinations. L2 weight decay with a coefficient of 1e-4 is applied to all parameters to encourage simpler models. Early stopping is implemented by monitoring validation loss and stopping training when performance stops improving.
+
+These techniques help ensure the model generalizes well to new patients rather than just memorizing the training data.
+
+3.6.2 Data Augmentation
+
+We use different augmentation techniques for each assessment type to improve model robustness across diverse clinical recording conditions. For audio augmentation, we add controlled background noise to simulate different recording environments, vary speech speed to account for natural rate differences, and apply pitch shifting to handle individual vocal variations while preserving disease-related patterns. For image augmentation with handwriting samples, we apply controlled rotation, scaling, and brightness adjustments to handle variations in writing size, orientation, and image quality. We carefully constrain these augmentations to maintain clinical relevance and avoid introducing misleading artifacts. For video augmentation in gait analysis, we use frame rate variation and temporal cropping to improve generalization across different recording equipment and video lengths while preserving the essential movement patterns that characterize Parkinson's gait abnormalities.
+
+These augmentation strategies help the model handle the variability in recording conditions that occurs in real clinical environments, improving robustness for practical deployment.
+
+3.6.3 Evaluation Methodology
+
+We use rigorous 5-fold stratified cross-validation with subject-independent splits to evaluate model performance. Stratified sampling ensures balanced representation of Parkinson's disease and healthy control cases across all folds, providing reliable performance estimates.
+
+Subject-independent splitting is crucial - we ensure that all samples from individual patients stay within single validation folds. This prevents the model from learning patient-specific characteristics that wouldn't generalize to new patients in clinical practice. This approach gives more realistic performance estimates that better reflect expected real-world performance.
+
+We monitor multiple performance metrics during training and evaluation. Classification accuracy measures overall correct detections, while sensitivity evaluates the ability to correctly identify Parkinson's disease cases and specificity assesses the ability to correctly identify healthy individuals. Precision, recall, and F1-score provide balanced performance measures, and ROC-AUC and PR-AUC evaluate performance across different decision thresholds.
+
+These comprehensive metrics ensure balanced performance across both diagnostic classes and enable optimization of the classification threshold for specific clinical applications.

@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Predict - Parkinson's Disease Prediction{% endblock %}
+{% block title %}Detect - Parkinson's Disease Detection{% endblock %}
 
 {% block content %}
 <div class="container">
     <!-- Page Header + Step Indicator -->
     <div class="mb-4 fade-in-up">
-        <h1 class="section-title mb-1"><i class="fas fa-chart-line" style="color:var(--accent)"></i> Prediction</h1>
+        <h1 class="section-title mb-1"><i class="fas fa-chart-line" style="color:var(--accent)"></i> Detection</h1>
         <p class="section-subtitle text-start" style="max-width:none">Select a modality, provide data, and run the AI analysis</p>
     </div>
 
@@ -145,7 +145,7 @@
                                         <i class="fas fa-user-injured"></i> PD Sample
                                     </button>
                                 </div>
-                                <small class="d-block mt-2" style="color:var(--text-3)"><i class="fas fa-info-circle"></i> Enhances prediction when combined with speech</small>
+                                <small class="d-block mt-2" style="color:var(--text-3)"><i class="fas fa-info-circle"></i> Enhances detection when combined with speech</small>
                             </div>
 
                             <div class="text-center my-3"><span class="chip">OR</span></div>
@@ -192,7 +192,7 @@
                                         <i class="fas fa-user-injured"></i> PD Sample
                                     </button>
                                 </div>
-                                <small class="d-block mt-2" style="color:var(--text-3)"><i class="fas fa-info-circle"></i> Enhances prediction when combined with speech</small>
+                                <small class="d-block mt-2" style="color:var(--text-3)"><i class="fas fa-info-circle"></i> Enhances detection when combined with speech</small>
                             </div>
 
                             <div class="text-center my-3"><span class="chip">OR</span></div>
@@ -221,7 +221,7 @@
 
                         <!-- ===== Combined Tab ===== -->
                         <div class="tab-pane fade" id="combinedTab" role="tabpanel" aria-labelledby="combined-tab">
-                            <h6 class="mb-3"><i class="fas fa-layer-group" style="color:var(--info)"></i> Combined Video Analysis</h6>
+                            <h6 class="mb-3"><i class="fas fa-layer-group" style="color:var(--info)"></i> Multi-Modal Analysis</h6>
 
                             <div class="surface-card p-3 mb-3">
                                 <div class="d-flex align-items-center gap-2 mb-2">
@@ -242,44 +242,64 @@
 
                             <div class="alert alert-info small">
                                 <i class="fas fa-info-circle"></i>
-                                Upload a single video containing speech, writing, and walking tasks.
+                                Upload files for multiple modalities. You can upload 1, 2, or all 3 types of files.
                             </div>
 
+                            <!-- Speech Upload -->
                             <div class="surface-card p-3 mb-3">
-                                <h6 class="small fw-bold mb-2"><i class="fas fa-video" style="color:var(--info)"></i> Upload Assessment Video</h6>
-                                <div class="upload-zone" id="combinedDropZone">
+                                <h6 class="small fw-bold mb-2"><i class="fas fa-microphone" style="color:var(--accent)"></i> Speech / Audio (Optional)</h6>
+                                <div class="upload-zone" id="combinedSpeechDropZone">
+                                    <div class="upload-icon"><i class="fas fa-music"></i></div>
+                                    <p>Drop audio file here or click to browse</p>
+                                    <div class="upload-hint">MP3, WAV, OGG, FLAC (max 50MB)</div>
+                                    <input type="file" class="form-control d-none" id="combinedSpeechInput" accept="audio/*">
+                                </div>
+                                <div id="combinedSpeechPreview" class="mt-2" style="display:none">
+                                    <small class="text-success"><i class="fas fa-check-circle"></i> <span id="combinedSpeechFileName"></span></small>
+                                </div>
+                            </div>
+
+                            <!-- Handwriting Upload -->
+                            <div class="surface-card p-3 mb-3">
+                                <h6 class="small fw-bold mb-2"><i class="fas fa-pen" style="color:var(--success)"></i> Handwriting Image (Optional)</h6>
+                                <div class="upload-zone" id="combinedHandwritingDropZone">
+                                    <div class="upload-icon"><i class="fas fa-image"></i></div>
+                                    <p>Drop image here or click to browse</p>
+                                    <div class="upload-hint">JPG, PNG, BMP (max 50MB)</div>
+                                    <input type="file" class="form-control d-none" id="combinedHandwritingInput" accept="image/*">
+                                </div>
+                                <div id="combinedHandwritingPreview" class="mt-2" style="display:none">
+                                    <img id="combinedHandwritingImg" class="img-fluid rounded" style="max-height:120px;border:1px solid var(--border)">
+                                    <div><small class="text-success"><i class="fas fa-check-circle"></i> <span id="combinedHandwritingFileName"></span></small></div>
+                                </div>
+                            </div>
+
+                            <!-- Gait Upload -->
+                            <div class="surface-card p-3 mb-3">
+                                <h6 class="small fw-bold mb-2"><i class="fas fa-walking" style="color:var(--warning)"></i> Gait Video (Optional)</h6>
+                                <div class="upload-zone" id="combinedGaitDropZone">
                                     <div class="upload-icon"><i class="fas fa-film"></i></div>
                                     <p>Drop video here or click to browse</p>
                                     <div class="upload-hint">MP4, MOV, AVI (max 50MB)</div>
-                                    <input type="file" class="form-control d-none" id="combinedVideoInput" accept="video/*">
+                                    <input type="file" class="form-control d-none" id="combinedGaitInput" accept="video/*">
                                 </div>
-
-                                <div class="mt-3 mb-2">
-                                    <small class="fw-bold d-block mb-2" style="color:var(--text-2)">Features to extract:</small>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="extractVoiceCheck" checked>
-                                        <label class="form-check-label small" for="extractVoiceCheck">
-                                            <i class="fas fa-microphone" style="color:var(--accent)"></i> Voice (22 features)
-                                        </label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="extractHandwritingCheck">
-                                        <label class="form-check-label small" for="extractHandwritingCheck">
-                                            <i class="fas fa-pen" style="color:var(--success)"></i> Handwriting (10 features)
-                                        </label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="extractGaitCheck">
-                                        <label class="form-check-label small" for="extractGaitCheck">
-                                            <i class="fas fa-walking" style="color:var(--warning)"></i> Gait (10 features)
-                                        </label>
-                                    </div>
+                                <div id="combinedGaitPreview" class="mt-2" style="display:none">
+                                    <small class="text-success"><i class="fas fa-check-circle"></i> <span id="combinedGaitFileName"></span></small>
                                 </div>
+                            </div>
 
-                                <button type="button" class="btn btn-info btn-sm w-100" id="uploadCombinedBtn">
-                                    <i class="fas fa-brain"></i> Process & Extract
+                            <!-- Upload Button -->
+                            <div class="surface-card p-3 mb-3">
+                                <button type="button" class="btn btn-info btn-lg w-100" id="uploadCombinedBtn">
+                                    <i class="fas fa-brain"></i> Process Selected Files
                                 </button>
                                 <div id="combinedUploadStatus" class="mt-2"></div>
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle"></i> 
+                                        Upload at least one file. More modalities improve prediction accuracy.
+                                    </small>
+                                </div>
                             </div>
 
                             <div id="combinedFeatureStatus"></div>
@@ -291,8 +311,8 @@
                         <div class="d-grid gap-2">
                             <button type="button" class="btn btn-accent btn-lg" id="predictBtn"
                                     data-bs-toggle="tooltip" data-bs-placement="top"
-                                    title="Run AI prediction (load example or upload data first)">
-                                <i class="fas fa-play-circle"></i> Make Prediction
+                                    title="Run AI detection (load example or upload data first)">
+                                <i class="fas fa-play-circle"></i> Make Detection
                             </button>
                             <button type="button" class="btn btn-secondary btn-sm" id="resetBtn">
                                 <i class="fas fa-redo"></i> Reset All
@@ -300,7 +320,7 @@
                         </div>
                         <div class="text-center mt-3">
                             <small style="color:var(--text-3)">
-                                <i class="fas fa-info-circle"></i> Multiple modalities improve prediction accuracy.
+                                <i class="fas fa-info-circle"></i> Multiple modalities improve detection accuracy.
                             </small>
                         </div>
                     </div>
@@ -327,7 +347,7 @@
         <div class="modal-content results-modal-content">
             <div class="modal-header results-modal-header">
                 <h5 class="modal-title" id="resultsModalLabel">
-                    <i class="fas fa-chart-pie" style="color:var(--success);margin-right:6px"></i> Prediction Results
+                    <i class="fas fa-chart-pie" style="color:var(--success);margin-right:6px"></i> Detection Results
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -336,11 +356,11 @@
                     <!-- Model badge -->
                     <div class="text-center mb-3" id="modelTypeBadgeContainer"></div>
 
-                    <!-- Prediction Result -->
-                    <div class="text-center mb-4" id="predictionResultArea">
-                        <div id="predictionIcon" style="font-size:3.5rem;margin-bottom:.75rem"></div>
-                        <h3 id="predictionLabel" class="mb-1"></h3>
-                        <p id="predictionText" class="small mb-0" style="max-width:440px;margin:0 auto"></p>
+                    <!-- Detection Result -->
+                    <div class="text-center mb-4" id="detectionResultArea">
+                        <div id="detectionIcon" style="font-size:3.5rem;margin-bottom:.75rem"></div>
+                        <h3 id="detectionLabel" class="mb-1"></h3>
+                        <p id="detectionText" class="small mb-0" style="max-width:440px;margin:0 auto"></p>
                     </div>
 
                     <!-- Confidence Ring -->
@@ -434,7 +454,7 @@
                     <i class="fas fa-times"></i> Close
                 </button>
                 <button type="button" class="btn btn-accent" onclick="resetForm()" data-bs-dismiss="modal">
-                    <i class="fas fa-redo"></i> New Prediction
+                    <i class="fas fa-redo"></i> New Detection
                 </button>
             </div>
         </div>

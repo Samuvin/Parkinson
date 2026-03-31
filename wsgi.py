@@ -1,4 +1,4 @@
-"""WSGI entry point for Parkinson's Disease Prediction System.
+"""WSGI entry point for Parkinson's Disease Detection System.
 
 Uses Waitress as the production WSGI server (works on Windows, Linux, and Mac).
 Run with: python wsgi.py   or   waitress-serve --host=0.0.0.0 --port=8000 wsgi:app
@@ -21,7 +21,7 @@ app = create_app()
 if __name__ == "__main__":
     import waitress
 
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8001))
     print(f"Starting Waitress server at http://0.0.0.0:{port}")
     print("Press Ctrl+C to stop.")
     waitress.serve(app, host="0.0.0.0", port=port, threads=4)

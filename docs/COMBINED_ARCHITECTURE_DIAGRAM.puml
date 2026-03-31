@@ -1,0 +1,69 @@
+@startuml Combined_Architecture_Diagram
+title Parkinson's Disease Prediction System - Compact Flow
+
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 12
+skinparam ArrowColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+
+start
+
+group USER INPUT
+:User Login & Upload File;
+:File Validation & Feature Extraction;
+fork
+  :Speech → 22 Features;
+fork again
+  :Handwriting → 10 Features;
+fork again
+  :Gait → 10 Features;
+end fork
+:Scale & Normalize Features;
+end group
+
+group SE-RESNET ENCODERS (3 Parallel)
+:Input Preparation & Zero-fill Missing;
+:Stem Block: Conv1d(1→32) + BatchNorm + ReLU;
+:Residual Block 1: Conv1d + BN + ReLU + Conv1d + BN + SE Module + Skip;
+:Residual Block 2: Conv1d(32→64) + BN + ReLU + Conv1d + BN + SE Module + Skip;
+:Global Average Pooling + Linear(64→64) + Dropout;
+:3 Embeddings [64 each]: Speech, Handwriting, Gait;
+end group
+
+group ATTENTION FUSION
+fork
+  :Score Speech\nLinear(64→32) → Tanh → Linear(32→1);
+fork again
+  :Score Handwriting\nLinear(64→32) → Tanh → Linear(32→1);
+fork again
+  :Score Gait\nLinear(64→32) → Tanh → Linear(32→1);
+end fork
+:Softmax Normalization → Attention Weights;
+:Weighted Combination → Fused Embedding [64];
+end group
+
+group DENSE CLASSIFIER
+fork
+  :Layer 1\nLinear(64→32);
+fork again
+  :ReLU Activation;
+fork again
+  :Dropout(0.3);
+end fork
+:Layer 2: Linear(32→1) → Sigmoid → Probability [0-1];
+end group
+
+group OUTPUT
+if (Probability >= 0.5?) then (yes)
+  :Prediction = "Parkinson's";
+else (no)
+  :Prediction = "Healthy";
+endif
+:Display Results: Prediction + Confidence % + Attention Weights;
+end group
+
+stop
+
+@enduml

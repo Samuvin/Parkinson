@@ -1,4 +1,4 @@
-"""Flask web application for Parkinson's Disease prediction."""
+"""Flask web application for Parkinson's Disease detection."""
 
 import sys
 import os
@@ -46,7 +46,7 @@ def setup_logging(app):
         app.logger.addHandler(file_handler)
         
         app.logger.setLevel(logging.INFO)
-        app.logger.info('Parkinson\'s Prediction System startup')
+        app.logger.info('Parkinson\'s Detection System startup')
 
 
 def create_app(config_path=None):
@@ -120,7 +120,7 @@ def create_app(config_path=None):
     
     @app.route('/predict_page')
     def predict_page():
-        """Prediction page."""
+        """Detection page."""
         return render_template('predict.html')
     
     @app.route('/about')
@@ -162,7 +162,7 @@ def create_app(config_path=None):
 
 if __name__ == '__main__':
     print("\n" + "="*60)
-    print("Parkinson's Disease Prediction System")
+    print("Parkinson's Disease Detection System")
     print("="*60)
     print("\nRun the app with:  python wsgi.py")
     print("Or use the start script:  start.bat (Windows)  or  ./start.sh (Linux/Mac)")

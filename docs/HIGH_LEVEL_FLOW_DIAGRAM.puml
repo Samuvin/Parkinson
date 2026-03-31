@@ -1,0 +1,108 @@
+@startuml High_Level_Parkinson_Prediction_Flow
+title Parkinson's Disease Prediction System - High-Level Flow\n(User Journey + Algorithm Architecture Overview)
+
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 12
+skinparam ArrowColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityBorderColor black
+skinparam PartitionBorderColor black
+skinparam PartitionBackgroundColor #F8F9FA
+
+||**USER LAYER**|
+start
+:User Login/Register;
+:Select Input Type;
+note right
+  • Audio (speech)
+  • Image (handwriting)  
+  • Video (gait)
+  • Combined video
+end note
+
+||**INPUT PROCESSING**|
+if (Input provided?) then (File Upload)
+  :Upload & Validate File;
+  :Extract Features;
+  note right
+    **Feature Extraction:**
+    • Speech → 22 acoustic features
+    • Handwriting → 10 motor features
+    • Gait → 10 movement features
+  end note
+else (Manual Input)
+  :Enter Feature Values;
+endif
+
+:Prepare Model Input;
+note right
+  **Input Preparation:**
+  • Scale features
+  • Handle missing modalities (zero-fill)
+  • Always 3 vectors: [22], [10], [10]
+end note
+
+||**AI MODEL PROCESSING**|
+
+:**Step 1: Parallel Encoding**;
+fork
+  :Speech Encoder\n(SE-ResNet 1D);
+  :22 features → 64D embedding;
+fork again
+  :Handwriting Encoder\n(SE-ResNet 1D);
+  :10 features → 64D embedding;
+fork again
+  :Gait Encoder\n(SE-ResNet 1D);
+  :10 features → 64D embedding;
+end fork
+
+:**Step 2: Attention Fusion**;
+:Score each modality importance;
+:Compute attention weights;
+:Fuse embeddings → Single 64D vector;
+note right
+  **Attention Mechanism:**
+  • Learns which modality to trust most
+  • Example: [Speech: 55%, Hand: 15%, Gait: 30%]
+  • Handles missing data automatically
+end note
+
+:**Step 3: Classification**;
+:Dense layers (64→32→1);
+:Apply Sigmoid;
+:Generate probability & prediction;
+
+||**OUTPUT PROCESSING**|
+:Format Results;
+note right
+  **Output:**
+  • Prediction: Parkinson's/Healthy
+  • Confidence: 0-100%
+  • Attention weights
+  • Feature importance
+end note
+
+:Save to Database;
+:Return JSON Response;
+
+||**USER INTERFACE**|
+:Display Results;
+:Show Explanation;
+:Visualize Attention Weights;
+
+:User Reviews Results;
+:Option for New Prediction;
+
+stop
+
+note bottom
+  **Key System Features:**
+  ✓ Multimodal AI (speech + handwriting + gait)
+  ✓ Flexible input (1, 2, or 3 modalities)
+  ✓ Explainable AI with attention visualization
+  ✓ Real-time processing from raw files
+  ✓ Clinical-grade accuracy and reliability
+end note
+
+@enduml
