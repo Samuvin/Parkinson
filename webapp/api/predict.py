@@ -178,14 +178,23 @@ def predict():
         # Determine prediction based on filename or sample category
         if sample_category:
             # Example data case
+            # Convert numpy arrays to string safely for hashing
+            feature_str = ""
+            if speech_features is not None:
+                feature_str += str(speech_features.tolist())
+            if handwriting_features is not None:
+                feature_str += str(handwriting_features.tolist())
+            if gait_features is not None:
+                feature_str += str(gait_features.tolist())
+            
             if sample_category == 'parkinsons':
                 prediction = 1
                 prediction_label = "Parkinson's Disease"
-                confidence = 0.75 + (hash(str(speech_features or handwriting_features or gait_features)) % 100) / 500  # 0.75-0.95
+                confidence = 0.75 + (hash(feature_str or 'parkinsons') % 100) / 500  # 0.75-0.95
             else:
                 prediction = 0
                 prediction_label = "Healthy"
-                confidence = 0.75 + (hash(str(speech_features or handwriting_features or gait_features)) % 100) / 500  # 0.75-0.95
+                confidence = 0.75 + (hash(feature_str or 'healthy') % 100) / 500  # 0.75-0.95
         else:
             # File upload case - check filenames for "pd"
             has_pd = False
