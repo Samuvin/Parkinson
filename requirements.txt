@@ -4,8 +4,10 @@ pandas>=2.0.0
 scikit-learn>=1.3.0
 scipy>=1.11.0
 
-# Feature Extraction - Audio (Lightweight alternatives)
+# Feature Extraction - Audio (Essential for full mode)
+librosa>=0.10.0
 python-speech-features>=0.6
+praat-parselmouth>=0.4.3
 soundfile>=0.12.0
 
 # Feature Extraction - Image/Video (Essential only)
