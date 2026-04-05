@@ -491,7 +491,13 @@ function uploadCombinedVideo() {
     var extractHandwriting = hasHandwriting;
     var extractGait = hasGait;
 
-    var modalitiesText = [extractVoice ? 'Voice' : null, extractHandwriting ? 'Handwriting' : null, extractGait ? 'Gait' : null].filter(Boolean).join(', ');
+    // Create descriptive modality text for loading message
+    var modalityDescriptions = [];
+    if (extractVoice) modalityDescriptions.push('Speech / audio');
+    if (extractHandwriting) modalityDescriptions.push('Handwriting');
+    if (extractGait) modalityDescriptions.push('Gait');
+    
+    var modalitiesText = modalityDescriptions.join(', ');
 
     var formData = new FormData();
     var videoFile, videoFilename;
@@ -537,7 +543,7 @@ function uploadCombinedVideo() {
     updateSteps(2);
 
     var startTime = Date.now();
-    showExtractLoader('Processing video...', 'Extracting <strong>' + modalitiesText + '</strong> from video. This may take a moment.');
+    showExtractLoader('Extracting features...', 'Analyzing <strong>' + modalitiesText + '</strong> data. This may take a moment.');
 
     $.ajax({
         url: '/api/process_combined_video',
