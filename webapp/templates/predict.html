@@ -29,7 +29,7 @@
     </div>
 
     <div class="fade-in-up fade-in-up-d1">
-        <div class="card" style="overflow:visible;max-width:820px;margin:0 auto">
+        <div class="card main-predict-card" style="overflow:visible;margin:0 auto">
             <div class="card-header bg-primary">
                 <h5 class="mb-0"><i class="fas fa-sliders-h" style="color:var(--accent);margin-right:6px"></i> Input Data</h5>
             </div>
@@ -140,6 +140,9 @@
                                                 </div>
                                             </div>
                                             <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary file-change-btn" title="Change file" data-zone="audioDropZone" data-input="audioFileInput">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
                                                 <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="audioDropZone" data-input="audioFileInput">
                                                     <i class="fas fa-times"></i>
                                                 </button>
@@ -219,6 +222,9 @@
                                                 </div>
                                             </div>
                                             <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary file-change-btn" title="Change file" data-zone="handwritingDropZone" data-input="handwritingFileInput">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
                                                 <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="handwritingDropZone" data-input="handwritingFileInput">
                                                     <i class="fas fa-times"></i>
                                                 </button>
@@ -298,6 +304,9 @@
                                                 </div>
                                             </div>
                                             <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary file-change-btn" title="Change file" data-zone="gaitDropZone" data-input="gaitFileInput">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
                                                 <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="gaitDropZone" data-input="gaitFileInput">
                                                     <i class="fas fa-times"></i>
                                                 </button>
@@ -347,6 +356,10 @@
                                 Upload files for multiple modalities. You can upload 1, 2, or all 3 types of files.
                             </div>
 
+                            <!-- Desktop Two-Column Layout -->
+                            <div class="combined-desktop-layout">
+                                <div class="combined-inputs-column">
+
                             <!-- Speech Upload -->
                             <div class="surface-card p-3 mb-3">
                                 <h6 class="small fw-bold mb-2"><i class="fas fa-microphone" style="color:var(--accent)"></i> Speech / Audio (Optional)</h6>
@@ -377,6 +390,9 @@
                                                 </div>
                                             </div>
                                             <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary file-change-btn" title="Change file" data-zone="combinedSpeechDropZone" data-input="combinedSpeechInput">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
                                                 <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="combinedSpeechDropZone" data-input="combinedSpeechInput">
                                                     <i class="fas fa-times"></i>
                                                 </button>
@@ -423,6 +439,9 @@
                                                 </div>
                                             </div>
                                             <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary file-change-btn" title="Change file" data-zone="combinedHandwritingDropZone" data-input="combinedHandwritingInput">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
                                                 <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="combinedHandwritingDropZone" data-input="combinedHandwritingInput">
                                                     <i class="fas fa-times"></i>
                                                 </button>
@@ -469,6 +488,9 @@
                                                 </div>
                                             </div>
                                             <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary file-change-btn" title="Change file" data-zone="combinedGaitDropZone" data-input="combinedGaitInput">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
                                                 <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="combinedGaitDropZone" data-input="combinedGaitInput">
                                                     <i class="fas fa-times"></i>
                                                 </button>
@@ -490,7 +512,6 @@
                                 <button type="button" class="btn btn-info btn-lg w-100" id="uploadCombinedBtn">
                                     <i class="fas fa-bolt"></i> Extract Features
                                 </button>
-                                <div id="combinedUploadStatus" class="mt-2"></div>
                                 <div class="mt-2">
                                     <small class="text-muted">
                                         <i class="fas fa-info-circle"></i> 
@@ -499,7 +520,21 @@
                                 </div>
                             </div>
 
-                            <div id="combinedFeatureStatus"></div>
+                                </div>
+                                
+                                <!-- Desktop Status Column -->
+                                <div class="combined-status-column">
+                                    <div class="surface-card p-3 mb-3">
+                                        <h6 class="small fw-bold mb-3">
+                                            <i class="fas fa-chart-line" style="color:var(--accent)"></i> 
+                                            Processing Status
+                                        </h6>
+                                        <div id="combinedUploadStatus" class="mb-2"></div>
+                                        <div id="combinedFeatureStatus"></div>
+                                        
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -515,12 +550,62 @@
                                 <i class="fas fa-redo"></i> Reset All
                             </button>
                         </div>
-                        <div class="text-center mt-3">
-                            <small style="color:var(--text-3)">
-                                <i class="fas fa-info-circle"></i> Multiple modalities improve detection accuracy.
-                            </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Keyboard Shortcuts Help Modal -->
+    <div class="modal fade" id="keyboardShortcutsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background:var(--bg-deep);border:1px solid var(--border);color:var(--text-1)">
+                <div class="modal-header" style="border-color:var(--border)">
+                    <h5 class="modal-title">
+                        <i class="fas fa-keyboard" style="color:var(--accent)"></i> 
+                        Keyboard Shortcuts
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="keyboard-shortcuts-list">
+                        <div class="shortcut-item">
+                            <div class="shortcut-keys">
+                                <kbd>Ctrl</kbd> + <kbd>Enter</kbd>
+                            </div>
+                            <div class="shortcut-description">Make Detection</div>
+                        </div>
+                        <div class="shortcut-item">
+                            <div class="shortcut-keys">
+                                <kbd>Ctrl</kbd> + <kbd>R</kbd>
+                            </div>
+                            <div class="shortcut-description">Reset Form</div>
+                        </div>
+                        <div class="shortcut-item">
+                            <div class="shortcut-keys">
+                                <kbd>Esc</kbd>
+                            </div>
+                            <div class="shortcut-description">Close Modals</div>
+                        </div>
+                        <div class="shortcut-item">
+                            <div class="shortcut-keys">
+                                <kbd>1</kbd> - <kbd>4</kbd>
+                            </div>
+                            <div class="shortcut-description">Switch Modality Tabs</div>
+                        </div>
+                        <div class="shortcut-item">
+                            <div class="shortcut-keys">
+                                <kbd>?</kbd>
+                            </div>
+                            <div class="shortcut-description">Show This Help</div>
                         </div>
                     </div>
+                </div>
+                <div class="modal-footer" style="border-color:var(--border)">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Close
+                    </button>
                 </div>
             </div>
         </div>
@@ -613,37 +698,111 @@
                         <div class="col-md-6">
                             <!-- Model Explainability: Attention -->
                             <div id="dlAttentionSection" style="display:none">
-                                <div class="dl-section-toggle" data-target="attentionContent">
+                                <button type="button" class="dl-section-toggle" data-target="attentionContent" 
+                                        aria-expanded="false" aria-controls="attentionContent">
                                     <h6><i class="fas fa-brain" style="color:var(--accent)"></i> Modality Attention</h6>
                                     <i class="fas fa-chevron-down toggle-icon"></i>
-                                </div>
+                                </button>
                                 <div id="attentionContent" class="attention-chart"></div>
                             </div>
 
                             <!-- Model Explainability: Feature Importance -->
                             <div id="dlFeatureImportanceSection" style="display:none">
-                                <div class="dl-section-toggle" data-target="featureImportanceContent">
+                                <button type="button" class="dl-section-toggle" data-target="featureImportanceContent"
+                                        aria-expanded="false" aria-controls="featureImportanceContent">
                                     <h6><i class="fas fa-chart-bar" style="color:var(--success)"></i> Feature Importance</h6>
                                     <i class="fas fa-chevron-down toggle-icon"></i>
-                                </div>
+                                </button>
                                 <div id="featureImportanceContent" class="feature-importance-section"></div>
                             </div>
 
                             <!-- Model Explainability: Channel Weights -->
                             <div id="dlSEWeightsSection" style="display:none">
-                                <div class="dl-section-toggle" data-target="seWeightsContent">
+                                <button type="button" class="dl-section-toggle" data-target="seWeightsContent"
+                                        aria-expanded="false" aria-controls="seWeightsContent">
                                     <h6><i class="fas fa-sliders-h" style="color:var(--warning)"></i> Channel Weights</h6>
                                     <i class="fas fa-chevron-down toggle-icon"></i>
-                                </div>
+                                </button>
                                 <div id="seWeightsContent"></div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="alert alert-warning mt-3 small mb-0" role="alert">
-                        <strong><i class="fas fa-exclamation-triangle"></i> Disclaimer:</strong>
-                        For research/educational purposes only.
+                    <!-- Feature Details Section -->
+                    <div class="feature-details-section mt-4" id="featureDetailsSection" style="display: none;">
+                        <div class="text-center mb-4">
+                            <div class="feature-header-icon mb-2">
+                                <i class="fas fa-cogs"></i>
+                            </div>
+                            <h6 class="mb-1">
+                                Extracted Features
+                            </h6>
+                            <small class="text-muted">Detailed breakdown of features used for detection</small>
+                        </div>
+                        
+                        <div class="accordion" id="featureDetailsAccordion">
+                            <!-- Speech Features -->
+                            <div class="accordion-item" id="speechFeatureDetails" style="display: none;">
+                                <h2 class="accordion-header" id="speechFeatureHeader">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                            data-bs-target="#speechFeatureCollapse" aria-expanded="false" 
+                                            aria-controls="speechFeatureCollapse">
+                                        <i class="fas fa-microphone me-2" style="color: var(--accent);"></i>
+                                        <strong>Speech Features</strong>
+                                        <span class="badge bg-secondary ms-2" id="speechFeatureCount">22</span>
+                                    </button>
+                                </h2>
+                                <div id="speechFeatureCollapse" class="accordion-collapse collapse" 
+                                     aria-labelledby="speechFeatureHeader" data-bs-parent="#featureDetailsAccordion">
+                                    <div class="accordion-body">
+                                        <div class="feature-list" id="speechFeatureList">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Handwriting Features -->
+                            <div class="accordion-item" id="handwritingFeatureDetails" style="display: none;">
+                                <h2 class="accordion-header" id="handwritingFeatureHeader">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                            data-bs-target="#handwritingFeatureCollapse" aria-expanded="false" 
+                                            aria-controls="handwritingFeatureCollapse">
+                                        <i class="fas fa-pen me-2" style="color: var(--success);"></i>
+                                        <strong>Handwriting Features</strong>
+                                        <span class="badge bg-secondary ms-2" id="handwritingFeatureCount">10</span>
+                                    </button>
+                                </h2>
+                                <div id="handwritingFeatureCollapse" class="accordion-collapse collapse" 
+                                     aria-labelledby="handwritingFeatureHeader" data-bs-parent="#featureDetailsAccordion">
+                                    <div class="accordion-body">
+                                        <div class="feature-list" id="handwritingFeatureList">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Gait Features -->
+                            <div class="accordion-item" id="gaitFeatureDetails" style="display: none;">
+                                <h2 class="accordion-header" id="gaitFeatureHeader">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                            data-bs-target="#gaitFeatureCollapse" aria-expanded="false" 
+                                            aria-controls="gaitFeatureCollapse">
+                                        <i class="fas fa-walking me-2" style="color: var(--warning);"></i>
+                                        <strong>Gait Features</strong>
+                                        <span class="badge bg-secondary ms-2" id="gaitFeatureCount">10</span>
+                                    </button>
+                                </h2>
+                                <div id="gaitFeatureCollapse" class="accordion-collapse collapse" 
+                                     aria-labelledby="gaitFeatureHeader" data-bs-parent="#featureDetailsAccordion">
+                                    <div class="accordion-body">
+                                        <div class="feature-list" id="gaitFeatureList">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+
                 </div>
             </div>
             <div class="modal-footer results-modal-footer">

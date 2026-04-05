@@ -27,7 +27,49 @@ let uploadedFilenames = {
     gait: null
 };
 
+// Separate tracking for Combined tab uploads
+let combinedTabUploads = {
+    speech: false,
+    handwriting: false,
+    gait: false
+};
+
 let referenceCategory = null;
+
+// Feature name mappings (matching backend utils modules)
+const FEATURE_NAMES = {
+    speech: [
+        'MDVP:Fo(Hz)', 'MDVP:Fhi(Hz)', 'MDVP:Flo(Hz)',
+        'MDVP:Jitter(%)', 'MDVP:Jitter(Abs)', 'MDVP:RAP', 'MDVP:PPQ', 'Jitter:DDP',
+        'MDVP:Shimmer', 'MDVP:Shimmer(dB)', 'Shimmer:APQ3', 'Shimmer:APQ5', 
+        'MDVP:APQ', 'Shimmer:DDA',
+        'NHR', 'HNR',
+        'RPDE', 'DFA',
+        'spread1', 'spread2', 'D2', 'PPE'
+    ],
+    handwriting: [
+        'mean_pressure', 'std_pressure',
+        'mean_velocity', 'std_velocity',
+        'mean_acceleration',
+        'pen_up_time',
+        'stroke_length',
+        'writing_tempo',
+        'tremor_frequency',
+        'fluency_score'
+    ],
+    gait: [
+        'stride_interval',
+        'stride_interval_std',
+        'swing_time',
+        'stance_time',
+        'double_support',
+        'gait_speed',
+        'cadence',
+        'step_length',
+        'stride_regularity',
+        'gait_asymmetry'
+    ]
+};
 let currentActiveTab = 'speech'; // Track the current active tab
 
 /* ------------------------------------------------------------------ */
@@ -84,6 +126,26 @@ function enableLightMode() {
 /* ------------------------------------------------------------------ */
 
 $(document).ready(function () {
+    
+    // ---- Performance Optimizations ----
+    
+    // Detect and optimize for desktop performance
+    if (window.innerWidth >= 1024) {
+        // Preload critical resources for faster interactions
+        const link = document.createElement('link');
+        link.rel = 'preload';
+        link.as = 'fetch';
+        link.href = '/api/health';
+        document.head.appendChild(link);
+        
+        // Optimize animations for desktop
+        document.body.classList.add('desktop-optimized');
+    }
+    
+    // Detect reduced motion preference
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.body.classList.add('reduced-motion');
+    }
 
     // ---- Event Bindings ----
 
@@ -122,8 +184,10 @@ $(document).ready(function () {
         if (this.files && this.files[0]) {
             uploadedFilenames.speech = this.files[0].name;
             updateUploadZoneState('audioDropZone', 'has-file', this.files[0]);
+            updateStepsBasedOnProgress();
         } else {
             updateUploadZoneState('audioDropZone', 'empty');
+            updateStepsBasedOnProgress();
         }
     });
     $('#handwritingFileInput').change(function () {
@@ -131,16 +195,20 @@ $(document).ready(function () {
             uploadedFilenames.handwriting = this.files[0].name;
             updateUploadZoneState('handwritingDropZone', 'has-file', this.files[0]);
             $('#handwritingPreview').show();
+            updateStepsBasedOnProgress();
         } else {
             updateUploadZoneState('handwritingDropZone', 'empty');
+            updateStepsBasedOnProgress();
         }
     });
     $('#gaitFileInput').change(function () {
         if (this.files && this.files[0]) {
             uploadedFilenames.gait = this.files[0].name;
             updateUploadZoneState('gaitDropZone', 'has-file', this.files[0]);
+            updateStepsBasedOnProgress();
         } else {
             updateUploadZoneState('gaitDropZone', 'empty');
+            updateStepsBasedOnProgress();
         }
     });
     
@@ -148,31 +216,43 @@ $(document).ready(function () {
     $('#combinedSpeechInput').change(function () {
         if (this.files && this.files[0]) {
             uploadedFilenames.speech = this.files[0].name;
+            combinedTabUploads.speech = true;
             updateUploadZoneState('combinedSpeechDropZone', 'has-file', this.files[0]);
             $('#combinedSpeechFileName').text(this.files[0].name);
             $('#combinedSpeechPreview').show();
+            updateStepsBasedOnProgress();
         } else {
+            combinedTabUploads.speech = false;
             updateUploadZoneState('combinedSpeechDropZone', 'empty');
+            updateStepsBasedOnProgress();
         }
     });
     $('#combinedHandwritingInput').change(function () {
         if (this.files && this.files[0]) {
             uploadedFilenames.handwriting = this.files[0].name;
+            combinedTabUploads.handwriting = true;
             updateUploadZoneState('combinedHandwritingDropZone', 'has-file', this.files[0]);
             $('#combinedHandwritingFileName').text(this.files[0].name);
             $('#combinedHandwritingPreview').show();
+            updateStepsBasedOnProgress();
         } else {
+            combinedTabUploads.handwriting = false;
             updateUploadZoneState('combinedHandwritingDropZone', 'empty');
+            updateStepsBasedOnProgress();
         }
     });
     $('#combinedGaitInput').change(function () {
         if (this.files && this.files[0]) {
             uploadedFilenames.gait = this.files[0].name;
+            combinedTabUploads.gait = true;
             updateUploadZoneState('combinedGaitDropZone', 'has-file', this.files[0]);
             $('#combinedGaitFileName').text(this.files[0].name);
             $('#combinedGaitPreview').show();
+            updateStepsBasedOnProgress();
         } else {
+            combinedTabUploads.gait = false;
             updateUploadZoneState('combinedGaitDropZone', 'empty');
+            updateStepsBasedOnProgress();
         }
     });
 
@@ -188,12 +268,24 @@ $(document).ready(function () {
     $(document).on('click', '.dl-section-toggle', function () {
         var targetId = $(this).data('target');
         var $content = $('#' + targetId);
+        var $toggle = $(this);
+        
         if ($content.is(':visible')) {
             $content.slideUp(200);
-            $(this).addClass('collapsed');
+            $toggle.addClass('collapsed').attr('aria-expanded', 'false');
+            $toggle.find('.toggle-icon').removeClass('fa-chevron-up').addClass('fa-chevron-down');
         } else {
             $content.slideDown(200);
-            $(this).removeClass('collapsed');
+            $toggle.removeClass('collapsed').attr('aria-expanded', 'true');
+            $toggle.find('.toggle-icon').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+        }
+    });
+    
+    // Keyboard support for explainability toggles
+    $(document).on('keydown', '.dl-section-toggle', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            $(this).click();
         }
     });
 
@@ -218,6 +310,59 @@ $(document).ready(function () {
         const zoneId = $(this).data('zone');
         const inputId = $(this).data('input');
         removeUploadedFile(zoneId, inputId);
+    });
+    
+    // File change button event listeners
+    $(document).on('click', '.file-change-btn', function() {
+        const inputId = $(this).data('input');
+        const input = document.getElementById(inputId);
+        if (input) {
+            input.click();
+        }
+    });
+    
+    
+    // Keyboard shortcuts for desktop users
+    $(document).keydown(function(e) {
+        // Only handle shortcuts when not typing in inputs
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+        
+        // Ctrl/Cmd + Enter: Make Detection
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            makeDetection();
+        }
+        
+        // Ctrl/Cmd + R: Reset Form
+        if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+            e.preventDefault();
+            resetForm();
+        }
+        
+        // Escape: Close modals
+        if (e.key === 'Escape') {
+            $('.modal').modal('hide');
+        }
+        
+        // Tab navigation between modality tabs (1-4 keys)
+        if (e.key >= '1' && e.key <= '4') {
+            e.preventDefault();
+            const tabMap = {
+                '1': '#speech-tab',
+                '2': '#handwriting-tab', 
+                '3': '#gait-tab',
+                '4': '#combined-tab'
+            };
+            $(tabMap[e.key]).tab('show');
+        }
+        
+        // Show keyboard shortcuts help
+        if (e.key === '?') {
+            e.preventDefault();
+            $('#keyboardShortcutsModal').modal('show');
+        }
     });
     
     // Universal file preview click handlers
@@ -276,22 +421,49 @@ function initDropZone(zoneId, inputId) {
     var input = document.getElementById(inputId);
     if (!zone || !input) return;
 
+    // Make zone focusable for keyboard navigation
+    zone.setAttribute('tabindex', '0');
+    zone.setAttribute('role', 'button');
+    zone.setAttribute('aria-label', 'Upload file area');
+
     zone.addEventListener('click', function (e) { 
         // Don't trigger file dialog if clicking on preview elements or remove buttons
         if (e.target.closest('.file-preview-container') || 
             e.target.closest('.image-preview-container') || 
             e.target.closest('.file-remove-btn') ||
+            e.target.closest('.file-change-btn') ||
             e.target.closest('.upload-zone-actions')) {
             return;
         }
         
-        // Don't trigger file dialog if zone already has a file (has-file state)
+        // Allow click-to-replace for better desktop UX
+        // Show confirmation for replacement if file exists
         if (zone.classList.contains('has-file')) {
-            return;
+            const fileName = zone.querySelector('.file-name')?.textContent;
+            if (fileName && !confirm(`Replace "${fileName}" with a new file?`)) {
+                return;
+            }
         }
         
-        // Only open file dialog if zone is in empty state
+        // Open file dialog
         input.click(); 
+    });
+
+    // Keyboard navigation support
+    zone.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            
+            // Same logic as click handler
+            if (zone.classList.contains('has-file')) {
+                const fileName = zone.querySelector('.file-name')?.textContent;
+                if (fileName && !confirm(`Replace "${fileName}" with a new file?`)) {
+                    return;
+                }
+            }
+            
+            input.click();
+        }
     });
 
     zone.addEventListener('dragover', function (e) {
@@ -527,6 +699,30 @@ function updateSteps(current) {
     }
 }
 
+function updateStepsBasedOnProgress() {
+    // Determine current step based on actual user progress
+    let currentStep = 1; // Default: Select Modality
+    
+    // Check if user has provided any data (step 2)
+    const hasFiles = $('#audioFileInput')[0]?.files?.length > 0 ||
+                    $('#handwritingFileInput')[0]?.files?.length > 0 ||
+                    $('#gaitFileInput')[0]?.files?.length > 0 ||
+                    $('#combinedSpeechInput')[0]?.files?.length > 0 ||
+                    $('#combinedHandwritingInput')[0]?.files?.length > 0 ||
+                    $('#combinedGaitInput')[0]?.files?.length > 0;
+    
+    const hasFeatures = extractedFeatures.speech || extractedFeatures.handwriting || extractedFeatures.gait;
+    
+    if (hasFiles || hasFeatures) {
+        currentStep = 2; // Provide Data
+    }
+    
+    
+    // Note: Step 3 (View Results) is handled separately when results are shown
+    updateSteps(currentStep);
+}
+
+
 /* ------------------------------------------------------------------ */
 /*  Tab Switch -- FIX #1: Do NOT clear extractedFeatures               */
 /* ------------------------------------------------------------------ */
@@ -535,13 +731,18 @@ $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
     // Get the new tab that was activated
     let newTab = $(e.target).attr('id').replace('-tab', '');
     
-    // Only reset if we're actually switching to a different tab
+    // Update current active tab without clearing data
     if (newTab !== currentActiveTab) {
-        resetFormOnTabSwitch();
         currentActiveTab = newTab;
+        // Only stop recording if switching away from speech tab
+        if (isRecording && newTab !== 'speech') {
+            stopRecording();
+        }
     }
     
-    updateSteps(1);
+    // Update steps based on actual progress, not just tab selection
+    updateStepsBasedOnProgress();
+    
 });
 
 /* ------------------------------------------------------------------ */
@@ -587,7 +788,8 @@ function stopRecording() {
 /*  Upload Functions                                                   */
 /* ------------------------------------------------------------------ */
 
-var MIN_EXTRACT_LOADER_MS = 12000;
+// Dynamic extraction loading time based on device capabilities
+var MIN_EXTRACT_LOADER_MS = Math.max(1000, getOptimalLoadingTime() - 1000);
 
 function showExtractLoader(title, subtitle) {
     $('#loadingTitle').text(title || 'Extracting features...');
@@ -857,9 +1059,21 @@ function uploadCombinedVideo() {
                 extractedFeatures.handwriting = null;
                 extractedFeatures.gait = null;
                 
-                if (response.voice_features) extractedFeatures.speech = response.voice_features;
-                if (response.handwriting_features) extractedFeatures.handwriting = response.handwriting_features;
-                if (response.gait_features) extractedFeatures.gait = response.gait_features;
+                if (response.voice_features) {
+                    extractedFeatures.speech = response.voice_features;
+                    // Only mark as Combined tab upload if it was actually extracted
+                    if (extractVoice) combinedTabUploads.speech = true;
+                }
+                if (response.handwriting_features) {
+                    extractedFeatures.handwriting = response.handwriting_features;
+                    // Only mark as Combined tab upload if it was actually extracted
+                    if (extractHandwriting) combinedTabUploads.handwriting = true;
+                }
+                if (response.gait_features) {
+                    extractedFeatures.gait = response.gait_features;
+                    // Only mark as Combined tab upload if it was actually extracted
+                    if (extractGait) combinedTabUploads.gait = true;
+                }
                 
                 // Clear individual tab status displays since we're using combined processing
                 $('#speechFeatureStatus, #handwritingFeatureStatus, #gaitFeatureStatus').html('');
@@ -1007,7 +1221,8 @@ function makeDetection() {
     updateSteps(3);
 
     var startTime = Date.now();
-    var MIN_LOADER_MS = 12000;
+    // Dynamic loading time based on device capabilities
+    var MIN_LOADER_MS = getOptimalLoadingTime();
 
     $.ajax({
         url: '/api/predict',
@@ -1021,6 +1236,7 @@ function makeDetection() {
                 if (response.success) {
                     var displayCategory = referenceCategory || getDisplayCategoryFromFilenames(uploadedFilenames);
                     var displayResponse = randomizeDisplayResult(response, displayCategory);
+                    
                     displayResults(displayResponse, modalitiesUsed, totalFeatures);
                 } else {
                     showNotification('Detection failed: ' + (response.error || 'Unknown error'), 'danger');
@@ -1134,6 +1350,7 @@ function randomizeDisplayResult(response, exampleCategory) {
 /*  Display Results                                                    */
 /* ------------------------------------------------------------------ */
 
+
 function displayResults(response, modalitiesUsed, totalFeatures) {
     $('#loadingSection').hide();
 
@@ -1201,10 +1418,102 @@ function displayResults(response, modalitiesUsed, totalFeatures) {
         $('#dlSEWeightsSection').hide();
     }
 
+    // Render feature details
+    renderFeatureDetails();
+
     // Open results modal
     var resultsModal = new bootstrap.Modal(document.getElementById('resultsModal'));
     resultsModal.show();
     updateSteps(3);
+}
+
+/**
+ * Render feature details in the results modal
+ */
+function renderFeatureDetails() {
+    var hasAnyFeatures = false;
+
+    // Speech features
+    if (extractedFeatures.speech && extractedFeatures.speech.length > 0) {
+        var speechList = $('#speechFeatureList');
+        speechList.empty();
+        
+        var speechFeatures = extractedFeatures.speech;
+        var speechNames = FEATURE_NAMES.speech;
+        
+        var html = '<div class="feature-grid">';
+        for (var i = 0; i < speechFeatures.length && i < speechNames.length; i++) {
+            html += '<div class="feature-item">' +
+                '<span class="feature-number">' + (i + 1) + '</span>' +
+                '<span class="feature-name">' + speechNames[i] + '</span>' +
+                '</div>';
+        }
+        html += '</div>';
+        speechList.html(html);
+        
+        $('#speechFeatureCount').text(speechFeatures.length);
+        $('#speechFeatureDetails').show();
+        hasAnyFeatures = true;
+    } else {
+        $('#speechFeatureDetails').hide();
+    }
+
+    // Handwriting features
+    if (extractedFeatures.handwriting && extractedFeatures.handwriting.length > 0) {
+        var handwritingList = $('#handwritingFeatureList');
+        handwritingList.empty();
+        
+        var handwritingFeatures = extractedFeatures.handwriting;
+        var handwritingNames = FEATURE_NAMES.handwriting;
+        
+        var html = '<div class="feature-grid">';
+        for (var i = 0; i < handwritingFeatures.length && i < handwritingNames.length; i++) {
+            html += '<div class="feature-item">' +
+                '<span class="feature-number">' + (i + 1) + '</span>' +
+                '<span class="feature-name">' + handwritingNames[i] + '</span>' +
+                '</div>';
+        }
+        html += '</div>';
+        handwritingList.html(html);
+        
+        $('#handwritingFeatureCount').text(handwritingFeatures.length);
+        $('#handwritingFeatureDetails').show();
+        hasAnyFeatures = true;
+    } else {
+        $('#handwritingFeatureDetails').hide();
+    }
+
+    // Gait features
+    if (extractedFeatures.gait && extractedFeatures.gait.length > 0) {
+        var gaitList = $('#gaitFeatureList');
+        gaitList.empty();
+        
+        var gaitFeatures = extractedFeatures.gait;
+        var gaitNames = FEATURE_NAMES.gait;
+        
+        var html = '<div class="feature-grid">';
+        for (var i = 0; i < gaitFeatures.length && i < gaitNames.length; i++) {
+            html += '<div class="feature-item">' +
+                '<span class="feature-number">' + (i + 1) + '</span>' +
+                '<span class="feature-name">' + gaitNames[i] + '</span>' +
+                '</div>';
+        }
+        html += '</div>';
+        gaitList.html(html);
+        
+        $('#gaitFeatureCount').text(gaitFeatures.length);
+        $('#gaitFeatureDetails').show();
+        hasAnyFeatures = true;
+    } else {
+        $('#gaitFeatureDetails').hide();
+    }
+
+    // Show or hide the entire feature details section
+    if (hasAnyFeatures) {
+        $('#featureDetailsSection').show();
+    } else {
+        $('#featureDetailsSection').hide();
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1302,6 +1611,36 @@ function renderSEWeights(seWeights) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Performance Optimization Functions                                 */
+/* ------------------------------------------------------------------ */
+
+function getOptimalLoadingTime() {
+    // Base times
+    const DESKTOP_FAST = 2000;
+    const DESKTOP_NORMAL = 4000;
+    const MOBILE_FAST = 6000;
+    const MOBILE_NORMAL = 10000;
+    
+    // Check device capabilities
+    const isDesktop = window.innerWidth >= 1024;
+    const hasReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isHighDPI = window.devicePixelRatio > 1.5;
+    const hasGoodConnection = navigator.connection?.effectiveType === '4g' || 
+                             navigator.connection?.downlink > 10;
+    
+    // Determine optimal loading time
+    if (hasReducedMotion) {
+        return 1000; // Minimal delay for reduced motion users
+    }
+    
+    if (isDesktop) {
+        return (hasGoodConnection && !isHighDPI) ? DESKTOP_FAST : DESKTOP_NORMAL;
+    } else {
+        return hasGoodConnection ? MOBILE_FAST : MOBILE_NORMAL;
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Reset Functions                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -1317,6 +1656,7 @@ function resetFormOnTabSwitch() {
     // Clear all extracted features
     extractedFeatures = { speech: null, handwriting: null, gait: null };
     uploadedFilenames = { speech: null, handwriting: null, gait: null };
+    combinedTabUploads = { speech: false, handwriting: false, gait: false };
     referenceCategory = null;
 
     // Clear ALL status displays
@@ -1376,12 +1716,10 @@ function resetForm() {
     $('#dlAttentionSection, #dlFeatureImportanceSection, #dlSEWeightsSection').hide();
     $('#modelTypeBadgeContainer').empty();
 
-    // Reset to first tab
-    $('#speech-tab').tab('show');
-    currentActiveTab = 'speech';
+    // Keep current tab active (don't force switch to Speech tab)
 
-    // Reset steps
-    updateSteps(1);
+    // Reset steps based on actual progress
+    updateStepsBasedOnProgress();
 
     showNotification('Form reset — ready for new data', 'info');
 }
