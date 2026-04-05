@@ -561,6 +561,12 @@ ul li{color:var(--text-2)}
 .upload-zone:hover,.upload-zone.dragover{
     border-color:var(--accent);background:rgba(99,102,241,.04);
 }
+
+/* Don't change appearance on hover when file is uploaded */
+.upload-zone.has-file:hover {
+    border-color: var(--success);
+    background: var(--bg-surface-2);
+}
 .upload-zone .upload-icon{
     font-size:2rem;color:var(--text-3);
     transition:all .25s var(--ease);margin-bottom:.75rem;
@@ -568,6 +574,343 @@ ul li{color:var(--text-2)}
 .upload-zone:hover .upload-icon{color:var(--accent);transform:translateY(-4px)}
 .upload-zone p{color:var(--text-3);font-size:.88rem;margin:0}
 .upload-zone .upload-hint{font-size:.78rem;color:var(--text-3);margin-top:.5rem}
+
+/* Enhanced Upload Zone States */
+.upload-zone.has-file {
+    background: var(--bg-surface-2);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-color: var(--success);
+    border-style: solid;
+    padding: 1rem;
+    cursor: default; /* Change cursor to indicate it's not clickable */
+}
+
+.upload-zone.processing {
+    border-color: var(--accent);
+    background: rgba(99,102,241,.08);
+    animation: processingPulse 2s ease-in-out infinite;
+}
+
+.upload-zone.error {
+    border-color: var(--danger);
+    background: rgba(244,63,94,.08);
+}
+
+.upload-empty-state {
+    transition: all .3s var(--ease);
+}
+
+.upload-file-state {
+    transition: all .3s var(--ease);
+}
+
+.upload-zone-preview {
+    position: relative;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.upload-zone-actions {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity .2s var(--ease);
+}
+
+.upload-zone.has-file:hover .upload-zone-actions {
+    opacity: 1;
+}
+
+.upload-zone-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0.7;
+    transition: opacity .2s var(--ease);
+}
+
+.upload-zone.has-file:hover .upload-zone-hint {
+    opacity: 1;
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+}
+
+.file-icon {
+    font-size: 2.5rem;
+    color: var(--success);
+    flex-shrink: 0;
+}
+
+.file-details {
+    flex: 1;
+    text-align: left;
+    min-width: 0;
+}
+
+.file-name {
+    font-weight: 500;
+    color: var(--text-1);
+    font-size: .9rem;
+    margin-bottom: .25rem;
+    word-break: break-all;
+}
+
+.file-meta {
+    font-size: .75rem;
+    color: var(--text-3);
+}
+
+.file-remove-btn {
+    background: rgba(244,63,94,.1);
+    border: 1px solid rgba(244,63,94,.3);
+    color: var(--danger);
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-sm);
+    transition: all .2s var(--ease);
+}
+
+.file-remove-btn:hover {
+    background: var(--danger);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.upload-zone.has-file .upload-icon {
+    display: none;
+}
+
+.upload-zone.has-file p,
+.upload-zone.has-file .upload-hint {
+    display: none;
+}
+
+/* Image Preview Specific */
+.image-preview {
+    max-width: 100%;
+    max-height: 100px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    object-fit: cover;
+    transition: all .2s var(--ease);
+}
+
+.image-preview:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(99,102,241,.2);
+}
+
+.image-preview-container {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+    transition: transform .2s var(--ease);
+}
+
+.image-preview-container:hover {
+    transform: scale(1.02);
+}
+
+.image-preview-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,.6);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    border-radius: var(--r-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all .2s var(--ease);
+}
+
+.image-preview-container:hover .image-preview-overlay {
+    opacity: 1;
+}
+
+/* Only show overlay when image is loaded */
+.image-preview[src=""], .image-preview:not([src]) {
+    display: none !important;
+}
+
+.image-preview[src=""]:hover ~ .image-preview-overlay,
+.image-preview:not([src]):hover ~ .image-preview-overlay {
+    opacity: 0 !important;
+}
+
+.image-preview-overlay i {
+    color: white;
+    font-size: 1.5rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,.5);
+}
+
+/* Processing Animation */
+@keyframes processingPulse {
+    0%, 100% {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 0 rgba(99,102,241,.4);
+    }
+    50% {
+        border-color: var(--accent-end);
+        box-shadow: 0 0 0 4px rgba(99,102,241,.1);
+    }
+}
+
+/* Disabled state for demo mode */
+.upload-zone.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.upload-zone.disabled .upload-zone-actions {
+    display: none;
+}
+
+/* Image Preview Modal Styling */
+#imagePreviewModal .modal-content {
+    background: var(--bg-deep);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-lg), 0 0 40px rgba(99,102,241,.15);
+}
+
+#imagePreviewModalImg {
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-md);
+}
+
+#imagePreviewModalInfo .file-name {
+    font-weight: 500;
+    color: var(--text-1);
+    margin-bottom: 0.5rem;
+    word-break: break-all;
+}
+
+#imagePreviewModalInfo .file-meta {
+    font-size: 0.875rem;
+    color: var(--text-3);
+}
+
+/* Universal File Preview Container */
+.file-preview-container {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+    transition: transform .2s var(--ease);
+}
+
+.file-preview-container:hover {
+    transform: scale(1.02);
+}
+
+.file-preview-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,.6);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    border-radius: var(--r-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all .2s var(--ease);
+}
+
+.file-preview-container:hover .file-preview-overlay {
+    opacity: 1;
+}
+
+.file-preview-overlay i {
+    color: white;
+    text-shadow: 0 2px 4px rgba(0,0,0,.5);
+}
+
+/* Audio/Video specific styling */
+.file-preview-container[data-file-type="audio"] .file-icon,
+.file-preview-container[data-file-type="video"] .file-icon {
+    font-size: 3rem;
+    padding: 1rem;
+    background: rgba(255,255,255,.05);
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    transition: all .2s var(--ease);
+}
+
+.file-preview-container[data-file-type="audio"]:hover .file-icon,
+.file-preview-container[data-file-type="video"]:hover .file-icon {
+    background: rgba(255,255,255,.1);
+    border-color: var(--accent);
+    transform: scale(1.05);
+}
+
+/* File Preview Modal Styling */
+#filePreviewModal .modal-content {
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    color: var(--text-1);
+}
+
+#filePreviewModal .modal-header,
+#filePreviewModal .modal-footer {
+    border-color: var(--border);
+}
+
+#filePreviewModal .btn-close {
+    filter: invert(1);
+}
+
+#filePreviewModal audio,
+#filePreviewModal video {
+    background: var(--bg-card);
+    border-radius: var(--r-sm);
+}
+
+#filePreviewModal .audio-preview-icon {
+    padding: 2rem;
+    background: rgba(255,255,255,.02);
+    border-radius: var(--r-md);
+    border: 1px solid var(--border);
+    margin-bottom: 1rem;
+}
+
+#filePreviewInfo .file-name {
+    font-weight: 500;
+    color: var(--text-1);
+    margin-bottom: 0.5rem;
+}
+
+#filePreviewInfo .file-meta {
+    font-size: 0.875rem;
+    color: var(--text-3);
+}
 
 /* =================================================================
    Modality Card (predict page)

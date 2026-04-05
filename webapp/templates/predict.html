@@ -114,17 +114,49 @@
                             <div class="surface-card p-3 mb-3">
                                 <h6 class="small fw-bold mb-2"><i class="fas fa-cloud-upload-alt" style="color:var(--accent)"></i> Upload Audio</h6>
                                 <div class="upload-zone" id="audioDropZone">
-                                    <div class="upload-icon"><i class="fas fa-music"></i></div>
-                                    <p>Drop audio file here or click to browse</p>
-                                    <div class="upload-hint">MP3, WAV, OGG, FLAC (max 50MB)</div>
+                                    <!-- Empty state -->
+                                    <div class="upload-empty-state">
+                                        <div class="upload-icon"><i class="fas fa-music"></i></div>
+                                        <p>Drop audio file here or click to browse</p>
+                                        <div class="upload-hint">MP3, WAV, OGG, FLAC (max 50MB)</div>
+                                    </div>
+                                    
+                                    <!-- File uploaded state -->
+                                    <div class="upload-file-state" style="display: none;">
+                                        <div class="upload-zone-preview">
+                                            <div class="file-info">
+                                                <div class="file-preview-container" data-file-type="audio">
+                                                    <i class="fas fa-music file-icon"></i>
+                                                    <div class="file-preview-overlay">
+                                                        <div class="text-center">
+                                                            <i class="fas fa-play" style="color: white; font-size: 1.5rem; margin-bottom: 0.25rem;"></i>
+                                                            <div style="color: white; font-size: 0.75rem; font-weight: 500;">Click to play</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="file-details">
+                                                    <div class="file-name"></div>
+                                                    <div class="file-meta"></div>
+                                                </div>
+                                            </div>
+                                            <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="audioDropZone" data-input="audioFileInput">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            <div class="upload-zone-hint">
+                                                <small style="color: var(--text-3); font-size: 0.75rem;">
+                                                    <i class="fas fa-info-circle"></i> Drag & drop to replace
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <input type="file" class="form-control d-none" id="audioFileInput" accept="audio/*">
                                 </div>
                                 <button type="button" class="btn btn-primary btn-sm mt-2 w-100" id="uploadAudioBtn">
                                     <i class="fas fa-bolt"></i> Extract Features
                                 </button>
-                                <div id="audioPreview" class="mt-2" style="display:none">
-                                    <small class="text-success"><i class="fas fa-check-circle"></i> <span id="audioFileName"></span></small>
-                                </div>
                                 <div id="audioUploadStatus" class="mt-2"></div>
                             </div>
 
@@ -161,13 +193,45 @@
                             <div class="surface-card p-3 mb-3">
                                 <h6 class="small fw-bold mb-2"><i class="fas fa-image" style="color:var(--success)"></i> Upload Handwriting Image</h6>
                                 <div class="upload-zone" id="handwritingDropZone">
-                                    <div class="upload-icon"><i class="fas fa-image"></i></div>
-                                    <p>Drop image here or click to browse</p>
-                                    <div class="upload-hint">JPG, PNG, BMP (max 50MB)</div>
+                                    <!-- Empty state -->
+                                    <div class="upload-empty-state">
+                                        <div class="upload-icon"><i class="fas fa-image"></i></div>
+                                        <p>Drop image here or click to browse</p>
+                                        <div class="upload-hint">JPG, PNG, BMP (max 50MB)</div>
+                                    </div>
+                                    
+                                    <!-- File uploaded state -->
+                                    <div class="upload-file-state" style="display: none;">
+                                        <div class="upload-zone-preview">
+                                            <div class="file-info">
+                                                <div class="image-preview-container">
+                                                    <img class="image-preview" id="handwritingImg" style="display: none;">
+                                                    <div class="image-preview-overlay">
+                                                        <div class="text-center">
+                                                            <i class="fas fa-search-plus" style="color: white; font-size: 1.5rem; margin-bottom: 0.25rem;"></i>
+                                                            <div style="color: white; font-size: 0.75rem; font-weight: 500;">Click to preview</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="file-details">
+                                                    <div class="file-name"></div>
+                                                    <div class="file-meta"></div>
+                                                </div>
+                                            </div>
+                                            <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="handwritingDropZone" data-input="handwritingFileInput">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            <div class="upload-zone-hint">
+                                                <small style="color: var(--text-3); font-size: 0.75rem;">
+                                                    <i class="fas fa-info-circle"></i> Drag & drop to replace
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <input type="file" class="form-control d-none" id="handwritingFileInput" accept="image/*">
-                                </div>
-                                <div id="handwritingPreview" class="mt-2 text-center" style="display:none">
-                                    <img id="handwritingImg" class="img-fluid rounded" style="max-height:160px;border:1px solid var(--border)">
                                 </div>
                                 <button type="button" class="btn btn-success btn-sm mt-2 w-100" id="uploadHandwritingBtn">
                                     <i class="fas fa-bolt"></i> Extract Features
@@ -208,17 +272,49 @@
                             <div class="surface-card p-3 mb-3">
                                 <h6 class="small fw-bold mb-2"><i class="fas fa-video" style="color:var(--warning)"></i> Upload Walking Video</h6>
                                 <div class="upload-zone" id="gaitDropZone">
-                                    <div class="upload-icon"><i class="fas fa-film"></i></div>
-                                    <p>Drop video here or click to browse</p>
-                                    <div class="upload-hint">MP4, MOV, AVI (max 50MB)</div>
+                                    <!-- Empty state -->
+                                    <div class="upload-empty-state">
+                                        <div class="upload-icon"><i class="fas fa-film"></i></div>
+                                        <p>Drop video here or click to browse</p>
+                                        <div class="upload-hint">MP4, MOV, AVI (max 50MB)</div>
+                                    </div>
+                                    
+                                    <!-- File uploaded state -->
+                                    <div class="upload-file-state" style="display: none;">
+                                        <div class="upload-zone-preview">
+                                            <div class="file-info">
+                                                <div class="file-preview-container" data-file-type="video">
+                                                    <i class="fas fa-film file-icon" style="color: var(--warning);"></i>
+                                                    <div class="file-preview-overlay">
+                                                        <div class="text-center">
+                                                            <i class="fas fa-play" style="color: white; font-size: 1.5rem; margin-bottom: 0.25rem;"></i>
+                                                            <div style="color: white; font-size: 0.75rem; font-weight: 500;">Click to play</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="file-details">
+                                                    <div class="file-name"></div>
+                                                    <div class="file-meta"></div>
+                                                </div>
+                                            </div>
+                                            <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="gaitDropZone" data-input="gaitFileInput">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            <div class="upload-zone-hint">
+                                                <small style="color: var(--text-3); font-size: 0.75rem;">
+                                                    <i class="fas fa-info-circle"></i> Drag & drop to replace
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <input type="file" class="form-control d-none" id="gaitFileInput" accept="video/*">
                                 </div>
                                 <button type="button" class="btn btn-warning btn-sm mt-2 w-100" id="uploadGaitBtn">
                                     <i class="fas fa-bolt"></i> Extract Features
                                 </button>
-                                <div id="gaitPreview" class="mt-2" style="display:none">
-                                    <small class="text-success"><i class="fas fa-check-circle"></i> <span id="gaitFileName"></span></small>
-                                </div>
                                 <div id="gaitUploadStatus" class="mt-2"></div>
                             </div>
 
@@ -255,13 +351,45 @@
                             <div class="surface-card p-3 mb-3">
                                 <h6 class="small fw-bold mb-2"><i class="fas fa-microphone" style="color:var(--accent)"></i> Speech / Audio (Optional)</h6>
                                 <div class="upload-zone" id="combinedSpeechDropZone">
-                                    <div class="upload-icon"><i class="fas fa-music"></i></div>
-                                    <p>Drop audio file here or click to browse</p>
-                                    <div class="upload-hint">MP3, WAV, OGG, FLAC (max 50MB)</div>
+                                    <!-- Empty state -->
+                                    <div class="upload-empty-state">
+                                        <div class="upload-icon"><i class="fas fa-music"></i></div>
+                                        <p>Drop audio file here or click to browse</p>
+                                        <div class="upload-hint">MP3, WAV, OGG, FLAC (max 50MB)</div>
+                                    </div>
+                                    
+                                    <!-- File uploaded state -->
+                                    <div class="upload-file-state" style="display: none;">
+                                        <div class="upload-zone-preview">
+                                            <div class="file-info">
+                                                <div class="file-preview-container" data-file-type="audio">
+                                                    <i class="fas fa-music file-icon"></i>
+                                                    <div class="file-preview-overlay">
+                                                        <div class="text-center">
+                                                            <i class="fas fa-play" style="color: white; font-size: 1.5rem; margin-bottom: 0.25rem;"></i>
+                                                            <div style="color: white; font-size: 0.75rem; font-weight: 500;">Click to play</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="file-details">
+                                                    <div class="file-name"></div>
+                                                    <div class="file-meta"></div>
+                                                </div>
+                                            </div>
+                                            <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="combinedSpeechDropZone" data-input="combinedSpeechInput">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            <div class="upload-zone-hint">
+                                                <small style="color: var(--text-3); font-size: 0.75rem;">
+                                                    <i class="fas fa-info-circle"></i> Drag & drop to replace
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <input type="file" class="form-control d-none" id="combinedSpeechInput" accept="audio/*">
-                                </div>
-                                <div id="combinedSpeechPreview" class="mt-2" style="display:none">
-                                    <small class="text-success"><i class="fas fa-check-circle"></i> <span id="combinedSpeechFileName"></span></small>
                                 </div>
                             </div>
 
@@ -269,14 +397,45 @@
                             <div class="surface-card p-3 mb-3">
                                 <h6 class="small fw-bold mb-2"><i class="fas fa-pen" style="color:var(--success)"></i> Handwriting Image (Optional)</h6>
                                 <div class="upload-zone" id="combinedHandwritingDropZone">
-                                    <div class="upload-icon"><i class="fas fa-image"></i></div>
-                                    <p>Drop image here or click to browse</p>
-                                    <div class="upload-hint">JPG, PNG, BMP (max 50MB)</div>
+                                    <!-- Empty state -->
+                                    <div class="upload-empty-state">
+                                        <div class="upload-icon"><i class="fas fa-image"></i></div>
+                                        <p>Drop image here or click to browse</p>
+                                        <div class="upload-hint">JPG, PNG, BMP (max 50MB)</div>
+                                    </div>
+                                    
+                                    <!-- File uploaded state -->
+                                    <div class="upload-file-state" style="display: none;">
+                                        <div class="upload-zone-preview">
+                                            <div class="file-info">
+                                                <div class="image-preview-container">
+                                                    <img class="image-preview" id="combinedHandwritingImg" style="display: none;">
+                                                    <div class="image-preview-overlay">
+                                                        <div class="text-center">
+                                                            <i class="fas fa-search-plus" style="color: white; font-size: 1.5rem; margin-bottom: 0.25rem;"></i>
+                                                            <div style="color: white; font-size: 0.75rem; font-weight: 500;">Click to preview</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="file-details">
+                                                    <div class="file-name"></div>
+                                                    <div class="file-meta"></div>
+                                                </div>
+                                            </div>
+                                            <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="combinedHandwritingDropZone" data-input="combinedHandwritingInput">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            <div class="upload-zone-hint">
+                                                <small style="color: var(--text-3); font-size: 0.75rem;">
+                                                    <i class="fas fa-info-circle"></i> Drag & drop to replace
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <input type="file" class="form-control d-none" id="combinedHandwritingInput" accept="image/*">
-                                </div>
-                                <div id="combinedHandwritingPreview" class="mt-2" style="display:none">
-                                    <img id="combinedHandwritingImg" class="img-fluid rounded" style="max-height:120px;border:1px solid var(--border)">
-                                    <div><small class="text-success"><i class="fas fa-check-circle"></i> <span id="combinedHandwritingFileName"></span></small></div>
                                 </div>
                             </div>
 
@@ -284,13 +443,45 @@
                             <div class="surface-card p-3 mb-3">
                                 <h6 class="small fw-bold mb-2"><i class="fas fa-walking" style="color:var(--warning)"></i> Gait Video (Optional)</h6>
                                 <div class="upload-zone" id="combinedGaitDropZone">
-                                    <div class="upload-icon"><i class="fas fa-film"></i></div>
-                                    <p>Drop video here or click to browse</p>
-                                    <div class="upload-hint">MP4, MOV, AVI (max 50MB)</div>
+                                    <!-- Empty state -->
+                                    <div class="upload-empty-state">
+                                        <div class="upload-icon"><i class="fas fa-film"></i></div>
+                                        <p>Drop video here or click to browse</p>
+                                        <div class="upload-hint">MP4, MOV, AVI (max 50MB)</div>
+                                    </div>
+                                    
+                                    <!-- File uploaded state -->
+                                    <div class="upload-file-state" style="display: none;">
+                                        <div class="upload-zone-preview">
+                                            <div class="file-info">
+                                                <div class="file-preview-container" data-file-type="video">
+                                                    <i class="fas fa-film file-icon" style="color: var(--warning);"></i>
+                                                    <div class="file-preview-overlay">
+                                                        <div class="text-center">
+                                                            <i class="fas fa-play" style="color: white; font-size: 1.5rem; margin-bottom: 0.25rem;"></i>
+                                                            <div style="color: white; font-size: 0.75rem; font-weight: 500;">Click to play</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="file-details">
+                                                    <div class="file-name"></div>
+                                                    <div class="file-meta"></div>
+                                                </div>
+                                            </div>
+                                            <div class="upload-zone-actions">
+                                                <button type="button" class="btn btn-sm file-remove-btn" title="Remove file" data-zone="combinedGaitDropZone" data-input="combinedGaitInput">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            <div class="upload-zone-hint">
+                                                <small style="color: var(--text-3); font-size: 0.75rem;">
+                                                    <i class="fas fa-info-circle"></i> Drag & drop to replace
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <input type="file" class="form-control d-none" id="combinedGaitInput" accept="video/*">
-                                </div>
-                                <div id="combinedGaitPreview" class="mt-2" style="display:none">
-                                    <small class="text-success"><i class="fas fa-check-circle"></i> <span id="combinedGaitFileName"></span></small>
                                 </div>
                             </div>
 
@@ -476,6 +667,52 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body text-center" id="examplePreviewContent"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Universal File Preview Modal -->
+<div class="modal fade" id="filePreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="background:var(--bg-deep);border:1px solid var(--border);color:var(--text-1)">
+            <div class="modal-header" style="border-color:var(--border)">
+                <h5 class="modal-title" id="filePreviewModalTitle">File Preview</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center p-4">
+                <!-- Image Preview -->
+                <div id="imagePreviewContainer" style="display: none;">
+                    <img id="filePreviewImg" class="img-fluid rounded" style="max-height:70vh;max-width:100%;border:1px solid var(--border);">
+                </div>
+                
+                <!-- Audio Preview -->
+                <div id="audioPreviewContainer" style="display: none;">
+                    <div class="audio-preview-icon mb-3">
+                        <i class="fas fa-music" style="font-size: 4rem; color: var(--accent);"></i>
+                    </div>
+                    <audio id="filePreviewAudio" controls style="width: 100%; max-width: 400px;">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+                
+                <!-- Video Preview -->
+                <div id="videoPreviewContainer" style="display: none;">
+                    <video id="filePreviewVideo" controls style="max-height:70vh;max-width:100%;border:1px solid var(--border);border-radius:var(--r-sm);">
+                        Your browser does not support the video element.
+                    </video>
+                </div>
+                
+                <!-- File Info -->
+                <div id="filePreviewInfo" class="mt-3">
+                    <div class="file-name" style="font-weight:500;color:var(--text-1);margin-bottom:0.5rem;"></div>
+                    <div class="file-meta" style="font-size:0.875rem;color:var(--text-3);"></div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-color:var(--border)">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
         </div>
     </div>
 </div>

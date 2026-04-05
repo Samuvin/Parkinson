@@ -52,8 +52,8 @@ function enableLightMode() {
     // Hide upload sections and show light mode notice
     $('.upload-zone').each(function() {
         $(this).addClass('disabled').css('opacity', '0.4');
-        $(this).find('p').html('<i class="fas fa-lock"></i> File upload disabled in demo mode');
-        $(this).find('.upload-hint').html('<strong>Use example data buttons below instead</strong>');
+        $(this).find('.upload-empty-state p').html('<i class="fas fa-lock"></i> File upload disabled in demo mode');
+        $(this).find('.upload-empty-state .upload-hint').html('<strong>Use example data buttons below instead</strong>');
     });
     
     // Disable upload buttons and change their text
@@ -121,18 +121,26 @@ $(document).ready(function () {
     $('#audioFileInput').change(function () {
         if (this.files && this.files[0]) {
             uploadedFilenames.speech = this.files[0].name;
-            $('#audioFileName').text(this.files[0].name);
-            $('#audioPreview').show();
+            updateUploadZoneState('audioDropZone', 'has-file', this.files[0]);
+        } else {
+            updateUploadZoneState('audioDropZone', 'empty');
         }
     });
     $('#handwritingFileInput').change(function () {
-        if (this.files && this.files[0]) uploadedFilenames.handwriting = this.files[0].name;
+        if (this.files && this.files[0]) {
+            uploadedFilenames.handwriting = this.files[0].name;
+            updateUploadZoneState('handwritingDropZone', 'has-file', this.files[0]);
+            $('#handwritingPreview').show();
+        } else {
+            updateUploadZoneState('handwritingDropZone', 'empty');
+        }
     });
     $('#gaitFileInput').change(function () {
         if (this.files && this.files[0]) {
             uploadedFilenames.gait = this.files[0].name;
-            $('#gaitFileName').text(this.files[0].name);
-            $('#gaitPreview').show();
+            updateUploadZoneState('gaitDropZone', 'has-file', this.files[0]);
+        } else {
+            updateUploadZoneState('gaitDropZone', 'empty');
         }
     });
     
@@ -140,23 +148,31 @@ $(document).ready(function () {
     $('#combinedSpeechInput').change(function () {
         if (this.files && this.files[0]) {
             uploadedFilenames.speech = this.files[0].name;
+            updateUploadZoneState('combinedSpeechDropZone', 'has-file', this.files[0]);
             $('#combinedSpeechFileName').text(this.files[0].name);
             $('#combinedSpeechPreview').show();
+        } else {
+            updateUploadZoneState('combinedSpeechDropZone', 'empty');
         }
     });
     $('#combinedHandwritingInput').change(function () {
         if (this.files && this.files[0]) {
             uploadedFilenames.handwriting = this.files[0].name;
+            updateUploadZoneState('combinedHandwritingDropZone', 'has-file', this.files[0]);
             $('#combinedHandwritingFileName').text(this.files[0].name);
-            previewCombinedHandwritingImage(this);
             $('#combinedHandwritingPreview').show();
+        } else {
+            updateUploadZoneState('combinedHandwritingDropZone', 'empty');
         }
     });
     $('#combinedGaitInput').change(function () {
         if (this.files && this.files[0]) {
             uploadedFilenames.gait = this.files[0].name;
+            updateUploadZoneState('combinedGaitDropZone', 'has-file', this.files[0]);
             $('#combinedGaitFileName').text(this.files[0].name);
             $('#combinedGaitPreview').show();
+        } else {
+            updateUploadZoneState('combinedGaitDropZone', 'empty');
         }
     });
 
@@ -196,6 +212,59 @@ $(document).ready(function () {
     
     // Initialize current tab
     currentActiveTab = 'speech'; // Default to speech tab
+    
+    // File remove button event listeners
+    $(document).on('click', '.file-remove-btn', function() {
+        const zoneId = $(this).data('zone');
+        const inputId = $(this).data('input');
+        removeUploadedFile(zoneId, inputId);
+    });
+    
+    // Universal file preview click handlers
+    $(document).on('click', '.file-preview-container, .image-preview-container', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation(); // Stop all event propagation
+        
+        const zone = $(this).closest('.upload-zone');
+        const fileName = zone.find('.file-name').text();
+        const fileMeta = zone.find('.file-meta').text();
+        const fileType = $(this).data('file-type');
+        
+        // Get the file input to access the actual file
+        const input = zone.find('input[type="file"]')[0];
+        if (input && input.files && input.files[0]) {
+            showFilePreviewModal(input.files[0], fileName, fileMeta, fileType);
+        } else {
+            // Fallback for image preview containers
+            const img = $(this).find('.image-preview');
+            if (img.length && img.attr('src') && img.attr('src') !== '') {
+                showFilePreviewModal(null, fileName, fileMeta, 'image', img.attr('src'));
+            }
+        }
+        
+        return false; // Additional prevention
+    });
+    
+    // Make file preview containers look clickable
+    $(document).on('mouseenter', '.file-preview-container, .image-preview-container', function() {
+        $(this).css('cursor', 'pointer');
+    });
+    
+    // Also handle clicks on file icons and overlays specifically
+    $(document).on('click', '.file-preview-overlay, .file-icon', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        
+        // Trigger the preview for the parent container
+        const container = $(this).closest('.file-preview-container, .image-preview-container');
+        if (container.length) {
+            container.trigger('click');
+        }
+        
+        return false;
+    });
 });
 
 /* ------------------------------------------------------------------ */
@@ -207,7 +276,23 @@ function initDropZone(zoneId, inputId) {
     var input = document.getElementById(inputId);
     if (!zone || !input) return;
 
-    zone.addEventListener('click', function () { input.click(); });
+    zone.addEventListener('click', function (e) { 
+        // Don't trigger file dialog if clicking on preview elements or remove buttons
+        if (e.target.closest('.file-preview-container') || 
+            e.target.closest('.image-preview-container') || 
+            e.target.closest('.file-remove-btn') ||
+            e.target.closest('.upload-zone-actions')) {
+            return;
+        }
+        
+        // Don't trigger file dialog if zone already has a file (has-file state)
+        if (zone.classList.contains('has-file')) {
+            return;
+        }
+        
+        // Only open file dialog if zone is in empty state
+        input.click(); 
+    });
 
     zone.addEventListener('dragover', function (e) {
         e.preventDefault();
@@ -222,6 +307,200 @@ function initDropZone(zoneId, inputId) {
         if (e.dataTransfer.files.length) {
             input.files = e.dataTransfer.files;
             $(input).trigger('change');
+        }
+    });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Upload Zone State Management                                       */
+/* ------------------------------------------------------------------ */
+
+function updateUploadZoneState(zoneId, state, fileData = null) {
+    const zone = document.getElementById(zoneId);
+    if (!zone) return;
+
+    const emptyState = zone.querySelector('.upload-empty-state');
+    const fileState = zone.querySelector('.upload-file-state');
+    
+    // Remove all state classes
+    zone.classList.remove('has-file', 'processing', 'error');
+    
+    switch (state) {
+        case 'empty':
+            if (emptyState) emptyState.style.display = 'block';
+            if (fileState) fileState.style.display = 'none';
+            break;
+            
+        case 'has-file':
+            zone.classList.add('has-file');
+            if (emptyState) emptyState.style.display = 'none';
+            if (fileState) fileState.style.display = 'block';
+            if (fileData) showFilePreview(zoneId, fileData);
+            break;
+            
+        case 'processing':
+            zone.classList.add('processing');
+            break;
+            
+        case 'error':
+            zone.classList.add('error');
+            break;
+    }
+}
+
+function showFilePreview(zoneId, file) {
+    const zone = document.getElementById(zoneId);
+    if (!zone) return;
+
+    const fileName = zone.querySelector('.file-name');
+    const fileMeta = zone.querySelector('.file-meta');
+    
+    if (fileName) {
+        fileName.textContent = file.name;
+    }
+    
+    if (fileMeta) {
+        const size = formatFileSize(file.size);
+        const type = file.type || 'Unknown type';
+        fileMeta.textContent = `${size} • ${type}`;
+    }
+
+    // Update the file-preview-container with the correct file type
+    const previewContainer = zone.querySelector('.file-preview-container');
+    if (previewContainer) {
+        if (file.type.startsWith('image/')) {
+            previewContainer.setAttribute('data-file-type', 'image');
+        } else if (file.type.startsWith('audio/')) {
+            previewContainer.setAttribute('data-file-type', 'audio');
+        } else if (file.type.startsWith('video/')) {
+            previewContainer.setAttribute('data-file-type', 'video');
+        }
+    }
+
+    // Handle image preview (create thumbnail in upload zone for handwriting)
+    if (file.type.startsWith('image/')) {
+        const img = zone.querySelector('.image-preview');
+        console.log('Processing image file:', file.name, 'Image element found:', !!img); // Debug log
+        if (img) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                img.src = e.target.result;
+                img.style.display = 'block';
+                console.log('Image loaded and displayed:', img.src.substring(0, 50) + '...'); // Debug log
+            };
+            reader.readAsDataURL(file);
+        } else {
+            // For zones that don't have image preview elements, we'll rely on the modal
+            console.log('No image preview element found, will use modal preview only');
+        }
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function removeUploadedFile(zoneId, inputId) {
+    const input = document.getElementById(inputId);
+    const zone = document.getElementById(zoneId);
+    
+    if (input) {
+        input.value = '';
+        input.files = null;
+    }
+    
+    // Clear the image preview
+    const img = zone.querySelector('.image-preview');
+    if (img) {
+        img.src = '';
+        img.style.display = 'none';
+    }
+    
+    // Update zone state to empty
+    updateUploadZoneState(zoneId, 'empty');
+    
+    // Clear related features and filenames based on the input type
+    if (inputId.includes('audio') || inputId.includes('Speech')) {
+        extractedFeatures.speech = null;
+        uploadedFilenames.speech = null;
+        if (inputId.includes('combinedSpeech')) {
+            $('#combinedSpeechPreview').hide();
+        }
+    } else if (inputId.includes('handwriting') || inputId.includes('Handwriting')) {
+        extractedFeatures.handwriting = null;
+        uploadedFilenames.handwriting = null;
+        if (inputId.includes('combinedHandwriting')) {
+            $('#combinedHandwritingPreview').hide();
+        } else {
+            $('#handwritingPreview').hide();
+        }
+    } else if (inputId.includes('gait') || inputId.includes('Gait')) {
+        extractedFeatures.gait = null;
+        uploadedFilenames.gait = null;
+        if (inputId.includes('combinedGait')) {
+            $('#combinedGaitPreview').hide();
+        }
+    }
+    
+    // Clear status displays
+    $('#speechFeatureStatus, #handwritingFeatureStatus, #gaitFeatureStatus, #combinedFeatureStatus').html('');
+    $('#audioUploadStatus, #handwritingUploadStatus, #gaitUploadStatus, #combinedUploadStatus').html('');
+    
+    updateDetectButton();
+    
+    showNotification('File removed successfully', 'info');
+}
+
+function showFilePreviewModal(file, fileName, fileMeta, fileType, imageSrc = null) {
+    // Hide all preview containers first
+    $('#imagePreviewContainer, #audioPreviewContainer, #videoPreviewContainer').hide();
+    
+    // Set file info
+    $('#filePreviewInfo .file-name').text(fileName || 'Unknown file');
+    $('#filePreviewInfo .file-meta').text(fileMeta || '');
+    
+    if (fileType === 'image' || (file && file.type.startsWith('image/'))) {
+        // Image preview
+        $('#filePreviewModalTitle').text('Image Preview');
+        const imgSrc = imageSrc || (file ? URL.createObjectURL(file) : '');
+        $('#filePreviewImg').attr('src', imgSrc);
+        $('#imagePreviewContainer').show();
+    } else if (fileType === 'audio' || (file && file.type.startsWith('audio/'))) {
+        // Audio preview
+        $('#filePreviewModalTitle').text('Audio Preview');
+        if (file) {
+            const audioSrc = URL.createObjectURL(file);
+            $('#filePreviewAudio').attr('src', audioSrc);
+        }
+        $('#audioPreviewContainer').show();
+    } else if (fileType === 'video' || (file && file.type.startsWith('video/'))) {
+        // Video preview
+        $('#filePreviewModalTitle').text('Video Preview');
+        if (file) {
+            const videoSrc = URL.createObjectURL(file);
+            $('#filePreviewVideo').attr('src', videoSrc);
+        }
+        $('#videoPreviewContainer').show();
+    }
+    
+    const modal = new bootstrap.Modal(document.getElementById('filePreviewModal'));
+    modal.show();
+    
+    // Clean up object URLs when modal is closed
+    $('#filePreviewModal').on('hidden.bs.modal', function() {
+        const audio = document.getElementById('filePreviewAudio');
+        const video = document.getElementById('filePreviewVideo');
+        if (audio && audio.src && audio.src.startsWith('blob:')) {
+            URL.revokeObjectURL(audio.src);
+            audio.src = '';
+        }
+        if (video && video.src && video.src.startsWith('blob:')) {
+            URL.revokeObjectURL(video.src);
+            video.src = '';
         }
     });
 }
@@ -384,6 +663,12 @@ function uploadFile(endpoint, formData, modality, statusElementId, btnSelector) 
 
     updateSteps(2);
 
+    // Set upload zone to processing state
+    var zoneId = modality === 'speech' ? 'audioDropZone' :
+                 modality === 'handwriting' ? 'handwritingDropZone' :
+                 'gaitDropZone';
+    updateUploadZoneState(zoneId, 'processing');
+
     var modalityLabel = modality === 'speech' ? 'Speech / audio' : modality === 'handwriting' ? 'Handwriting' : 'Gait';
     var startTime = Date.now();
     showExtractLoader('Extracting features...', 'Analyzing <strong>' + modalityLabel + '</strong> data. This may take a moment.');
@@ -412,6 +697,13 @@ function uploadFile(endpoint, formData, modality, statusElementId, btnSelector) 
             }
             hideExtractLoaderAfter(startTime, function () {
                 if ($btn) $btn.prop('disabled', false).html(btnOrigHtml);
+                
+                // Reset zone state back to has-file
+                var zoneId = modality === 'speech' ? 'audioDropZone' :
+                             modality === 'handwriting' ? 'handwritingDropZone' :
+                             'gaitDropZone';
+                updateUploadZoneState(zoneId, 'has-file');
+                
                 if (response.success) {
                     var modalityIcon = { speech: '🎤', handwriting: '✍️', gait: '🚶' };
                     $('#' + statusElementId).html(
@@ -431,6 +723,18 @@ function uploadFile(endpoint, formData, modality, statusElementId, btnSelector) 
         error: function (xhr) {
             hideExtractLoaderAfter(startTime, function () {
                 if ($btn) $btn.prop('disabled', false).html(btnOrigHtml);
+                
+                // Set zone state to error
+                var zoneId = modality === 'speech' ? 'audioDropZone' :
+                             modality === 'handwriting' ? 'handwritingDropZone' :
+                             'gaitDropZone';
+                updateUploadZoneState(zoneId, 'error');
+                
+                // Reset to has-file after a delay
+                setTimeout(function() {
+                    updateUploadZoneState(zoneId, 'has-file');
+                }, 3000);
+                
                 if (xhr.status === 401) {
                     showNotification('Please log in to upload files and make predictions.', 'warning');
                 } else {
@@ -448,16 +752,6 @@ function clearUploadStatus(modality) {
              modality === 'handwriting' ? 'handwritingUploadStatus' :
              'gaitUploadStatus';
     $('#' + id).html('');
-}
-
-function clearFilePreview(modality) {
-    if (modality === 'speech') {
-        $('#audioPreview').hide();
-        $('#audioFileName').text('');
-    } else if (modality === 'gait') {
-        $('#gaitPreview').hide();
-        $('#gaitFileName').text('');
-    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -542,6 +836,11 @@ function uploadCombinedVideo() {
 
     updateSteps(2);
 
+    // Set processing state for selected modalities
+    if (extractVoice) updateUploadZoneState('combinedSpeechDropZone', 'processing');
+    if (extractHandwriting) updateUploadZoneState('combinedHandwritingDropZone', 'processing');
+    if (extractGait) updateUploadZoneState('combinedGaitDropZone', 'processing');
+
     var startTime = Date.now();
     showExtractLoader('Extracting features...', 'Analyzing <strong>' + modalitiesText + '</strong> data. This may take a moment.');
 
@@ -569,6 +868,12 @@ function uploadCombinedVideo() {
             }
             hideExtractLoaderAfter(startTime, function () {
                 $btn.prop('disabled', false).html(btnOrig);
+                
+                // Reset zone states
+                if (extractVoice) updateUploadZoneState('combinedSpeechDropZone', 'has-file');
+                if (extractHandwriting) updateUploadZoneState('combinedHandwritingDropZone', 'has-file');
+                if (extractGait) updateUploadZoneState('combinedGaitDropZone', 'has-file');
+                
                 if (response.success) {
                     var fe = [];
                     if (response.voice_features) fe.push('🎤 Voice: ' + response.voice_features.length + ' features');
@@ -593,6 +898,19 @@ function uploadCombinedVideo() {
         error: function (xhr) {
             hideExtractLoaderAfter(startTime, function () {
                 $btn.prop('disabled', false).html(btnOrig);
+                
+                // Set error state for zones
+                if (extractVoice) updateUploadZoneState('combinedSpeechDropZone', 'error');
+                if (extractHandwriting) updateUploadZoneState('combinedHandwritingDropZone', 'error');
+                if (extractGait) updateUploadZoneState('combinedGaitDropZone', 'error');
+                
+                // Reset to has-file after delay
+                setTimeout(function() {
+                    if (extractVoice) updateUploadZoneState('combinedSpeechDropZone', 'has-file');
+                    if (extractHandwriting) updateUploadZoneState('combinedHandwritingDropZone', 'has-file');
+                    if (extractGait) updateUploadZoneState('combinedGaitDropZone', 'has-file');
+                }, 3000);
+                
                 if (xhr.status === 401) {
                     showNotification('Please log in to upload files and make predictions.', 'warning');
                 } else {
@@ -615,24 +933,16 @@ function uploadCombinedVideo() {
 /* ------------------------------------------------------------------ */
 
 function previewHandwritingImage(input) {
+    // This function is now handled by the showFilePreview function in updateUploadZoneState
+    // Keep for compatibility but the main logic is in showFilePreview
     if (input.files && input.files[0]) {
-        var reader = new FileReader();
-        reader.onload = function (e) {
-            $('#handwritingImg').attr('src', e.target.result);
-            $('#handwritingPreview').show();
-        };
-        reader.readAsDataURL(input.files[0]);
+        $('#handwritingPreview').show();
     }
 }
 
 function previewCombinedHandwritingImage(input) {
-    if (input.files && input.files[0]) {
-        var reader = new FileReader();
-        reader.onload = function (e) {
-            $('#combinedHandwritingImg').attr('src', e.target.result);
-        };
-        reader.readAsDataURL(input.files[0]);
-    }
+    // This function is now handled by the showFilePreview function in updateUploadZoneState
+    // Keep for compatibility but the main logic is in showFilePreview
 }
 
 function updateDetectButton() {
@@ -1016,11 +1326,17 @@ function resetFormOnTabSwitch() {
 
     // Hide all previews
     $('#handwritingPreview').hide();
-    $('#audioPreview').hide();
-    $('#gaitPreview').hide();
     $('#combinedSpeechPreview').hide();
     $('#combinedHandwritingPreview').hide();
     $('#combinedGaitPreview').hide();
+
+    // Reset all upload zone states
+    updateUploadZoneState('audioDropZone', 'empty');
+    updateUploadZoneState('handwritingDropZone', 'empty');
+    updateUploadZoneState('gaitDropZone', 'empty');
+    updateUploadZoneState('combinedSpeechDropZone', 'empty');
+    updateUploadZoneState('combinedHandwritingDropZone', 'empty');
+    updateUploadZoneState('combinedGaitDropZone', 'empty');
 
     // Stop any ongoing recording
     if (isRecording) stopRecording();
