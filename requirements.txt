@@ -12,6 +12,7 @@ soundfile>=0.12.0
 
 # Feature Extraction - Image/Video (Essential only)
 opencv-python-headless>=4.8.0
+scikit-image>=0.21.0
 Pillow>=10.0.0
 
 # Web Framework (Essential)
