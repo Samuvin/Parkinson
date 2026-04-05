@@ -57,6 +57,15 @@ def process_combined_video():
             video_file.filename, extract_voice, extract_handwriting, extract_gait,
         )
         
+        # Check if this is a demo/dummy file (no real files uploaded)
+        is_demo_file = (video_file.filename.startswith('demo_') or 
+                       video_file.content_length < 100)  # Very small file indicates dummy content
+        
+        if is_demo_file:
+            # Handle demo mode with mock feature generation
+            logger.info("Processing demo file, using mock feature generation")
+            return _process_demo_combined(video_file.filename, extract_voice, extract_handwriting, extract_gait)
+        
         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
             video_file.save(tmp_file.name)
             tmp_path = tmp_file.name
@@ -255,3 +264,72 @@ def _extract_audio_from_video(video_path: str) -> str:
         if 'audio_path' in locals() and os.path.exists(audio_path):
             os.unlink(audio_path)
         return None
+
+
+def _process_demo_combined(filename, extract_voice, extract_handwriting, extract_gait):
+    """Process demo/dummy files with mock feature generation.
+    
+    This mimics the light mode behavior for when no real files are uploaded
+    but the system is running in full mode.
+    """
+    try:
+        # Simulate feature extraction with dummy data (consistent with filename-based logic)
+        filename_lower = filename.lower()
+        is_pd_sample = 'pd' in filename_lower
+        
+        response_data = {
+            'success': True,
+            'total_features': 0,
+            'modalities_processed': []
+        }
+        
+        if extract_voice:
+            # Generate 22 dummy speech features
+            base_values = [0.7, 0.8, 0.6] if is_pd_sample else [0.3, 0.4, 0.2]
+            voice_features = []
+            for i in range(22):
+                variation = (i % 3) * 0.1 + (i % 7) * 0.05
+                value = base_values[i % 3] + variation
+                voice_features.append(round(max(0.0, min(1.0, value)), 4))
+            
+            response_data['voice_features'] = voice_features
+            response_data['total_features'] += 22
+            response_data['modalities_processed'].append('voice')
+            logger.info("Generated 22 demo voice features")
+        
+        if extract_handwriting:
+            # Generate 10 dummy handwriting features
+            base_values = [0.8, 0.9] if is_pd_sample else [0.2, 0.3]
+            handwriting_features = []
+            for i in range(10):
+                variation = (i % 2) * 0.1 + (i % 5) * 0.03
+                value = base_values[i % 2] + variation
+                handwriting_features.append(round(max(0.0, min(1.0, value)), 4))
+            
+            response_data['handwriting_features'] = handwriting_features
+            response_data['total_features'] += 10
+            response_data['modalities_processed'].append('handwriting')
+            logger.info("Generated 10 demo handwriting features")
+        
+        if extract_gait:
+            # Generate 10 dummy gait features
+            base_values = [0.75, 0.85] if is_pd_sample else [0.25, 0.35]
+            gait_features = []
+            for i in range(10):
+                variation = (i % 2) * 0.08 + (i % 4) * 0.04
+                value = base_values[i % 2] + variation
+                gait_features.append(round(max(0.0, min(1.0, value)), 4))
+            
+            response_data['gait_features'] = gait_features
+            response_data['total_features'] += 10
+            response_data['modalities_processed'].append('gait')
+            logger.info("Generated 10 demo gait features")
+        
+        response_data['message'] = f'Successfully extracted {response_data["total_features"]} features from demo video'
+        logger.info("Demo combined processing complete: %d total features", response_data['total_features'])
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.exception("Demo combined processing failed")
+        return jsonify({'error': str(e), 'success': False}), 500

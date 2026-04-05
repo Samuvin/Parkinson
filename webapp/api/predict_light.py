@@ -180,6 +180,84 @@ def predict_batch():
         return jsonify({'error': str(e), 'success': False}), 500
 
 
+@predict_bp.route('/process_combined_video', methods=['POST'])
+def process_combined_video():
+    """Light mode combined processing - simulates feature extraction from video."""
+    try:
+        # Check if video file is provided
+        if 'video' not in request.files:
+            return jsonify({'error': 'No video file provided', 'success': False}), 400
+        
+        video_file = request.files['video']
+        if video_file.filename == '':
+            return jsonify({'error': 'No video file selected', 'success': False}), 400
+        
+        # Get extraction options
+        extract_voice = request.form.get('extract_voice', 'false').lower() == 'true'
+        extract_handwriting = request.form.get('extract_handwriting', 'false').lower() == 'true'
+        extract_gait = request.form.get('extract_gait', 'false').lower() == 'true'
+        
+        if not any([extract_voice, extract_handwriting, extract_gait]):
+            return jsonify({'error': 'At least one extraction type must be selected', 'success': False}), 400
+        
+        # Simulate feature extraction with dummy data (consistent with filename-based logic)
+        filename = video_file.filename.lower()
+        is_pd_sample = 'pd' in filename
+        
+        response_data = {
+            'success': True,
+            'total_features': 0,
+            'modalities_processed': []
+        }
+        
+        if extract_voice:
+            # Generate 22 dummy speech features
+            base_values = [0.7, 0.8, 0.6] if is_pd_sample else [0.3, 0.4, 0.2]
+            voice_features = []
+            for i in range(22):
+                variation = (i % 3) * 0.1 + (i % 7) * 0.05
+                value = base_values[i % 3] + variation
+                voice_features.append(round(max(0.0, min(1.0, value)), 4))
+            
+            response_data['voice_features'] = voice_features
+            response_data['total_features'] += 22
+            response_data['modalities_processed'].append('voice')
+        
+        if extract_handwriting:
+            # Generate 10 dummy handwriting features
+            base_values = [0.8, 0.9] if is_pd_sample else [0.2, 0.3]
+            handwriting_features = []
+            for i in range(10):
+                variation = (i % 2) * 0.1 + (i % 5) * 0.03
+                value = base_values[i % 2] + variation
+                handwriting_features.append(round(max(0.0, min(1.0, value)), 4))
+            
+            response_data['handwriting_features'] = handwriting_features
+            response_data['total_features'] += 10
+            response_data['modalities_processed'].append('handwriting')
+        
+        if extract_gait:
+            # Generate 10 dummy gait features
+            base_values = [0.75, 0.85] if is_pd_sample else [0.25, 0.35]
+            gait_features = []
+            for i in range(10):
+                variation = (i % 2) * 0.08 + (i % 4) * 0.04
+                value = base_values[i % 2] + variation
+                gait_features.append(round(max(0.0, min(1.0, value)), 4))
+            
+            response_data['gait_features'] = gait_features
+            response_data['total_features'] += 10
+            response_data['modalities_processed'].append('gait')
+        
+        response_data['message'] = f'Successfully extracted {response_data["total_features"]} features from video'
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.exception("Combined video processing failed")
+        return jsonify({'error': str(e), 'success': False}), 500
+
+
 @predict_bp.route('/model_info', methods=['GET'])
 def model_info():
     """Model info for light mode."""

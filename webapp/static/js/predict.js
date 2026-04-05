@@ -28,6 +28,7 @@ let uploadedFilenames = {
 };
 
 let referenceCategory = null;
+let currentActiveTab = 'speech'; // Track the current active tab
 
 /* ------------------------------------------------------------------ */
 /*  Light Mode Detection                                               */
@@ -59,7 +60,7 @@ function enableLightMode() {
     $('#uploadAudioBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode');
     $('#uploadHandwritingBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode');
     $('#uploadGaitBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode');
-    $('#uploadCombinedBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode');
+    $('#uploadCombinedBtn').prop('disabled', false).html('<i class="fas fa-bolt"></i> Extract Features');
     
     // Hide recording section
     $('#recordBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode').removeClass('btn-danger').addClass('btn-secondary');
@@ -128,7 +129,11 @@ $(document).ready(function () {
         if (this.files && this.files[0]) uploadedFilenames.handwriting = this.files[0].name;
     });
     $('#gaitFileInput').change(function () {
-        if (this.files && this.files[0]) uploadedFilenames.gait = this.files[0].name;
+        if (this.files && this.files[0]) {
+            uploadedFilenames.gait = this.files[0].name;
+            $('#gaitFileName').text(this.files[0].name);
+            $('#gaitPreview').show();
+        }
     });
     
     // Combined tab file selections
@@ -185,6 +190,12 @@ $(document).ready(function () {
     initDropZone('combinedSpeechDropZone', 'combinedSpeechInput');
     initDropZone('combinedHandwritingDropZone', 'combinedHandwritingInput');
     initDropZone('combinedGaitDropZone', 'combinedGaitInput');
+    
+    // Check for light mode on page load
+    checkLightMode();
+    
+    // Initialize current tab
+    currentActiveTab = 'speech'; // Default to speech tab
 });
 
 /* ------------------------------------------------------------------ */
@@ -241,9 +252,16 @@ function updateSteps(current) {
 /*  Tab Switch -- FIX #1: Do NOT clear extractedFeatures               */
 /* ------------------------------------------------------------------ */
 
-$('button[data-bs-toggle="tab"]').on('shown.bs.tab', function () {
-    // Only clear UI status for the CURRENT tab's displays.
-    // Do NOT reset extractedFeatures — data is preserved across tabs.
+$('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
+    // Get the new tab that was activated
+    let newTab = $(e.target).attr('id').replace('-tab', '');
+    
+    // Only reset if we're actually switching to a different tab
+    if (newTab !== currentActiveTab) {
+        resetFormOnTabSwitch();
+        currentActiveTab = newTab;
+    }
+    
     updateSteps(1);
 });
 
@@ -358,6 +376,12 @@ function uploadFile(endpoint, formData, modality, statusElementId, btnSelector) 
         $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
     }
 
+    // Show upload status
+    var uploadStatusId = modality === 'speech' ? 'audioUploadStatus' :
+                        modality === 'handwriting' ? 'handwritingUploadStatus' :
+                        'gaitUploadStatus';
+    $('#' + uploadStatusId).html('<div class="alert alert-info small"><i class="fas fa-upload"></i> Uploading file...</div>');
+
     updateSteps(2);
 
     var modalityLabel = modality === 'speech' ? 'Speech / audio' : modality === 'handwriting' ? 'Handwriting' : 'Gait';
@@ -372,8 +396,18 @@ function uploadFile(endpoint, formData, modality, statusElementId, btnSelector) 
         contentType: false,
         success: function (response) {
             if (response.success) {
+                // Clear all features first when using individual modality
+                extractedFeatures.speech = null;
+                extractedFeatures.handwriting = null;
+                extractedFeatures.gait = null;
+                
+                // Set only the current modality
                 extractedFeatures[modality] = response.features;
                 $('#' + modality + 'Features').val(response.features.join(','));
+                
+                // Clear all status displays when using individual modality upload
+                $('#speechFeatureStatus, #handwritingFeatureStatus, #gaitFeatureStatus, #combinedFeatureStatus').html('');
+                
                 updateDetectButton();
             }
             hideExtractLoaderAfter(startTime, function () {
@@ -416,34 +450,85 @@ function clearUploadStatus(modality) {
     $('#' + id).html('');
 }
 
+function clearFilePreview(modality) {
+    if (modality === 'speech') {
+        $('#audioPreview').hide();
+        $('#audioFileName').text('');
+    } else if (modality === 'gait') {
+        $('#gaitPreview').hide();
+        $('#gaitFileName').text('');
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Combined Video Upload                                              */
 /* ------------------------------------------------------------------ */
 
 function uploadCombinedVideo() {
-    var fileInput = document.getElementById('combinedVideoInput');
-    if (!fileInput.files.length) { showNotification('Please select a video file first!', 'warning'); return; }
-
-    var extractVoice = $('#extractVoiceCheck').is(':checked');
-    var extractHandwriting = $('#extractHandwritingCheck').is(':checked');
-    var extractGait = $('#extractGaitCheck').is(':checked');
-
-    if (!extractVoice && !extractHandwriting && !extractGait) {
-        showNotification('Select at least one feature type to extract!', 'warning'); return;
+    // Check for separate file inputs in the combined tab
+    var speechInput = document.getElementById('combinedSpeechInput');
+    var handwritingInput = document.getElementById('combinedHandwritingInput');
+    var gaitInput = document.getElementById('combinedGaitInput');
+    
+    var hasSpeech = speechInput && speechInput.files.length > 0;
+    var hasHandwriting = handwritingInput && handwritingInput.files.length > 0;
+    var hasGait = gaitInput && gaitInput.files.length > 0;
+    
+    // In light mode, create dummy files for demonstration
+    var isLightMode = $('#uploadCombinedBtn').text().includes('Extract Features') && $('#lightModeNotice').length > 0;
+    if (isLightMode) {
+        // For demo purposes, simulate having all modalities
+        hasSpeech = true;
+        hasHandwriting = true; 
+        hasGait = true;
+    } else if (!hasSpeech && !hasHandwriting && !hasGait) {
+        showNotification('Please select at least one file to extract features from!', 'warning');
+        return;
     }
+
+    // Determine which modalities to extract based on uploaded files
+    var extractVoice = hasSpeech;
+    var extractHandwriting = hasHandwriting;
+    var extractGait = hasGait;
 
     var modalitiesText = [extractVoice ? 'Voice' : null, extractHandwriting ? 'Handwriting' : null, extractGait ? 'Gait' : null].filter(Boolean).join(', ');
 
     var formData = new FormData();
-    formData.append('video', fileInput.files[0]);
+    var videoFile, videoFilename;
+    
+    if (isLightMode) {
+        // Create a dummy video file for light mode
+        videoFile = new Blob(['dummy video content'], { type: 'video/mp4' });
+        videoFilename = 'demo_combined_pd.mp4'; // Use 'pd' in filename for consistent demo behavior
+    } else {
+        // In real mode, we need to create a combined approach or use the first available file
+        // For now, let's use the gait video as the primary file since it's most likely to contain all modalities
+        if (hasGait) {
+            videoFile = gaitInput.files[0];
+            videoFilename = videoFile.name;
+        } else if (hasSpeech) {
+            videoFile = speechInput.files[0];
+            videoFilename = videoFile.name;
+        } else if (hasHandwriting) {
+            videoFile = handwritingInput.files[0];
+            videoFilename = videoFile.name;
+        }
+    }
+    
+    formData.append('video', videoFile);
     formData.append('extract_voice', extractVoice);
     formData.append('extract_handwriting', extractHandwriting);
     formData.append('extract_gait', extractGait);
-
-    var videoFilename = fileInput.files[0].name;
-    if (extractVoice) uploadedFilenames.speech = videoFilename;
-    if (extractHandwriting) uploadedFilenames.handwriting = videoFilename;
-    if (extractGait) uploadedFilenames.gait = videoFilename;
+    // Set filenames based on what was actually uploaded or demo mode
+    if (extractVoice) {
+        uploadedFilenames.speech = isLightMode ? 'demo_speech_pd.mp3' : (hasSpeech ? speechInput.files[0].name : videoFilename);
+    }
+    if (extractHandwriting) {
+        uploadedFilenames.handwriting = isLightMode ? 'demo_handwriting_pd.jpg' : (hasHandwriting ? handwritingInput.files[0].name : videoFilename);
+    }
+    if (extractGait) {
+        uploadedFilenames.gait = isLightMode ? 'demo_gait_pd.mp4' : (hasGait ? gaitInput.files[0].name : videoFilename);
+    }
 
     var $btn = $('#uploadCombinedBtn');
     var btnOrig = $btn.html();
@@ -462,29 +547,40 @@ function uploadCombinedVideo() {
         contentType: false,
         success: function (response) {
             if (response.success) {
+                // Clear all features first, then set only the ones that were extracted
+                extractedFeatures.speech = null;
+                extractedFeatures.handwriting = null;
+                extractedFeatures.gait = null;
+                
                 if (response.voice_features) extractedFeatures.speech = response.voice_features;
                 if (response.handwriting_features) extractedFeatures.handwriting = response.handwriting_features;
                 if (response.gait_features) extractedFeatures.gait = response.gait_features;
+                
+                // Clear individual tab status displays since we're using combined processing
+                $('#speechFeatureStatus, #handwritingFeatureStatus, #gaitFeatureStatus').html('');
+                
                 updateDetectButton();
             }
             hideExtractLoaderAfter(startTime, function () {
                 $btn.prop('disabled', false).html(btnOrig);
                 if (response.success) {
                     var fe = [];
-                    if (response.voice_features) fe.push('<i class="fas fa-microphone" style="color:var(--accent)"></i> Voice: ' + response.voice_features.length + ' features');
-                    if (response.handwriting_features) fe.push('<i class="fas fa-pen" style="color:var(--success)"></i> Handwriting: ' + response.handwriting_features.length + ' features');
-                    if (response.gait_features) fe.push('<i class="fas fa-walking" style="color:var(--warning)"></i> Gait: ' + response.gait_features.length + ' features');
+                    if (response.voice_features) fe.push('🎤 Voice: ' + response.voice_features.length + ' features');
+                    if (response.handwriting_features) fe.push('✍️ Handwriting: ' + response.handwriting_features.length + ' features');
+                    if (response.gait_features) fe.push('🚶 Gait: ' + response.gait_features.length + ' features');
 
                     $('#combinedFeatureStatus').html(
                         '<div class="alert alert-success small">' +
-                        '<i class="fas fa-check-circle"></i> <strong>Combined analysis complete!</strong><br>' +
+                        '<i class="fas fa-check-circle"></i> <strong>Success!</strong><br>' +
                         fe.join('<br>') +
-                        '<br><small class="text-muted">Total: ' + response.total_features + ' features extracted</small></div>'
+                        '<br><small class="text-muted">Total: ' + response.total_features + ' features extracted</small>' +
+                        '<br><small class="text-muted">Source: Multi-modal analysis</small></div>'
                     );
                     $('#combinedUploadStatus').html('');
-                    showNotification('Successfully extracted ' + response.total_features + ' features!', 'success');
+                    showNotification('Successfully extracted ' + response.total_features + ' features from combined data!', 'success');
                 } else {
                     $('#combinedUploadStatus').html('');
+                    showNotification('Feature extraction failed. Please try again.', 'danger');
                 }
             });
         },
@@ -494,10 +590,15 @@ function uploadCombinedVideo() {
                 if (xhr.status === 401) {
                     showNotification('Please log in to upload files and make predictions.', 'warning');
                 } else {
-                    var errorMsg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Upload failed. Please try again.';
+                    var errorMsg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Feature extraction failed. Please try again.';
                     showNotification(errorMsg, 'danger');
                 }
                 $('#combinedUploadStatus').html('');
+                $('#combinedFeatureStatus').html(
+                    '<div class="alert alert-danger small">' +
+                    '<i class="fas fa-exclamation-triangle"></i> <strong>Error:</strong> Features could not be extracted. Please try again.' +
+                    '</div>'
+                );
             });
         }
     });
@@ -885,21 +986,19 @@ function renderSEWeights(seWeights) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Reset — FIX #3: Also clear combined inputs/status/checkboxes       */
+/*  Reset Functions                                                    */
 /* ------------------------------------------------------------------ */
 
-function resetForm() {
-    // Clear file inputs
+function resetFormOnTabSwitch() {
+    // Clear all file inputs
     $('#audioFileInput').val('');
     $('#handwritingFileInput').val('');
     $('#gaitFileInput').val('');
-    $('#combinedVideoInput').val('');
+    $('#combinedSpeechInput').val('');
+    $('#combinedHandwritingInput').val('');
+    $('#combinedGaitInput').val('');
 
-    // Clear hidden inputs
-    $('#speechFeatures').val('');
-    $('#handwritingFeatures').val('');
-    $('#gaitFeatures').val('');
-
+    // Clear all extracted features
     extractedFeatures = { speech: null, handwriting: null, gait: null };
     uploadedFilenames = { speech: null, handwriting: null, gait: null };
     referenceCategory = null;
@@ -909,17 +1008,35 @@ function resetForm() {
     $('#audioUploadStatus, #handwritingUploadStatus, #gaitUploadStatus').html('');
     $('#combinedUploadStatus, #combinedFeatureStatus').html('');
 
-    // Reset combined checkboxes
+    // Hide all previews
+    $('#handwritingPreview').hide();
+    $('#audioPreview').hide();
+    $('#gaitPreview').hide();
+    $('#combinedSpeechPreview').hide();
+    $('#combinedHandwritingPreview').hide();
+    $('#combinedGaitPreview').hide();
+
+    // Stop any ongoing recording
+    if (isRecording) stopRecording();
+
+    // Clear hidden inputs
+    $('#speechFeatures').val('');
+    $('#handwritingFeatures').val('');
+    $('#gaitFeatures').val('');
+
+    // Update detect button state
+    updateDetectButton();
+}
+
+function resetForm() {
+    // Use the tab switch reset function for common cleanup
+    resetFormOnTabSwitch();
+
+    // Additional cleanup specific to full reset
+    // Reset combined checkboxes (if they exist)
     $('#extractVoiceCheck').prop('checked', true);
     $('#extractHandwritingCheck').prop('checked', false);
     $('#extractGaitCheck').prop('checked', false);
-
-    // Hide previews
-    $('#handwritingPreview').hide();
-    $('#audioPreview').hide();
-
-    // Stop recording
-    if (isRecording) stopRecording();
 
     // Keep detect button enabled (clicking without data shows a message)
     var tip = bootstrap.Tooltip.getInstance(document.getElementById('predictBtn'));
@@ -939,6 +1056,7 @@ function resetForm() {
 
     // Reset to first tab
     $('#speech-tab').tab('show');
+    currentActiveTab = 'speech';
 
     // Reset steps
     updateSteps(1);
