@@ -305,6 +305,15 @@ $(document).ready(function () {
     // Initialize current tab
     currentActiveTab = 'speech'; // Default to speech tab
     
+    // Initialize step descriptions
+    updateStepDescriptions();
+    
+    // Initialize touch gestures for mobile tab navigation
+    initTouchGestures();
+    
+    // Initialize accessibility features
+    initAccessibilityFeatures();
+    
     // File remove button event listeners
     $(document).on('click', '.file-remove-btn', function() {
         const zoneId = $(this).data('zone');
@@ -343,7 +352,13 @@ $(document).ready(function () {
         
         // Escape: Close modals
         if (e.key === 'Escape') {
-            $('.modal').modal('hide');
+            // Close all open modals using Bootstrap 5 API
+            document.querySelectorAll('.modal.show').forEach(function(modal) {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            });
         }
         
         // Tab navigation between modality tabs (1-4 keys)
@@ -355,13 +370,21 @@ $(document).ready(function () {
                 '3': '#gait-tab',
                 '4': '#combined-tab'
             };
-            $(tabMap[e.key]).tab('show');
+            const tabElement = document.querySelector(tabMap[e.key]);
+            if (tabElement) {
+                const tabInstance = new bootstrap.Tab(tabElement);
+                tabInstance.show();
+            }
         }
         
         // Show keyboard shortcuts help
         if (e.key === '?') {
             e.preventDefault();
-            $('#keyboardShortcutsModal').modal('show');
+            const shortcutsModal = document.getElementById('keyboardShortcutsModal');
+            if (shortcutsModal) {
+                const modalInstance = new bootstrap.Modal(shortcutsModal);
+                modalInstance.show();
+            }
         }
     });
     
@@ -440,7 +463,12 @@ function initDropZone(zoneId, inputId) {
         // Show confirmation for replacement if file exists
         if (zone.classList.contains('has-file')) {
             const fileName = zone.querySelector('.file-name')?.textContent;
-            if (fileName && !confirm(`Replace "${fileName}" with a new file?`)) {
+            if (fileName) {
+                showFileReplaceConfirmation(fileName, function(confirmed) {
+                    if (confirmed) {
+                        input.click();
+                    }
+                });
                 return;
             }
         }
@@ -457,7 +485,12 @@ function initDropZone(zoneId, inputId) {
             // Same logic as click handler
             if (zone.classList.contains('has-file')) {
                 const fileName = zone.querySelector('.file-name')?.textContent;
-                if (fileName && !confirm(`Replace "${fileName}" with a new file?`)) {
+                if (fileName) {
+                    showFileReplaceConfirmation(fileName, function(confirmed) {
+                        if (confirmed) {
+                            input.click();
+                        }
+                    });
                     return;
                 }
             }
@@ -683,19 +716,68 @@ function showFilePreviewModal(file, fileName, fileMeta, fileType, imageSrc = nul
 
 function updateSteps(current) {
     // current: 1 = select, 2 = provide, 3 = results
+    const stepIndicator = document.getElementById('stepIndicator');
+    
+    // Update ARIA attributes for screen readers
+    if (stepIndicator) {
+        stepIndicator.setAttribute('aria-valuenow', current);
+        stepIndicator.setAttribute('aria-valuetext', `Step ${current} of 3`);
+    }
+    
     for (var i = 1; i <= 3; i++) {
         var step = document.getElementById('step' + i);
         if (!step) continue;
+        
+        // Remove existing states
         step.classList.remove('active', 'completed');
-        if (i < current) step.classList.add('completed');
-        else if (i === current) step.classList.add('active');
+        step.removeAttribute('aria-current');
+        
+        // Apply new states
+        if (i < current) {
+            step.classList.add('completed');
+            step.setAttribute('aria-label', `Step ${i} completed`);
+        } else if (i === current) {
+            step.classList.add('active');
+            step.setAttribute('aria-current', 'step');
+            step.setAttribute('aria-label', `Step ${i} current`);
+        } else {
+            step.setAttribute('aria-label', `Step ${i} pending`);
+        }
     }
+    
     for (var j = 1; j <= 2; j++) {
         var line = document.getElementById('stepLine' + j);
         if (!line) continue;
         line.classList.remove('active', 'completed');
         if (j < current) line.classList.add('completed');
         else if (j === current) line.classList.add('active');
+    }
+}
+
+function updateStepDescriptions() {
+    // Update step descriptions based on current active tab
+    const activeTab = currentActiveTab || 'speech';
+    const step1 = document.querySelector('#step1 span:last-child');
+    const step2 = document.querySelector('#step2 span:last-child');
+    
+    if (step1) {
+        const modalityNames = {
+            'speech': 'Speech Analysis',
+            'handwriting': 'Handwriting Analysis', 
+            'gait': 'Gait Analysis',
+            'combined': 'Multi-Modal Analysis'
+        };
+        step1.textContent = modalityNames[activeTab] || 'Select Modality';
+    }
+    
+    if (step2) {
+        const dataTypes = {
+            'speech': 'Record or Upload Audio',
+            'handwriting': 'Upload Handwriting Image',
+            'gait': 'Upload Gait Video', 
+            'combined': 'Upload Multiple Files'
+        };
+        step2.textContent = dataTypes[activeTab] || 'Provide Data';
     }
 }
 
@@ -717,9 +799,11 @@ function updateStepsBasedOnProgress() {
         currentStep = 2; // Provide Data
     }
     
-    
-    // Note: Step 3 (View Results) is handled separately when results are shown
+    // Update step indicator with current progress
     updateSteps(currentStep);
+    
+    // Update step descriptions based on current tab
+    updateStepDescriptions();
 }
 
 
@@ -883,17 +967,15 @@ function uploadFile(endpoint, formData, modality, statusElementId, btnSelector) 
         contentType: false,
         success: function (response) {
             if (response.success) {
-                // Clear all features first when using individual modality
-                extractedFeatures.speech = null;
-                extractedFeatures.handwriting = null;
-                extractedFeatures.gait = null;
-                
-                // Set only the current modality
+                // Set the current modality features (preserve others for multimodal analysis)
                 extractedFeatures[modality] = response.features;
                 $('#' + modality + 'Features').val(response.features.join(','));
                 
-                // Clear all status displays when using individual modality upload
-                $('#speechFeatureStatus, #handwritingFeatureStatus, #gaitFeatureStatus, #combinedFeatureStatus').html('');
+                // Clear only the current modality's status display
+                $('#' + modality + 'FeatureStatus').html('');
+                
+                // Announce success to screen readers
+                announceToScreenReader(`${modality} features extracted successfully. ${response.features.length} features ready for analysis.`);
                 
                 updateDetectButton();
             }
@@ -1174,7 +1256,209 @@ function updateDetectButton() {
             tip.hide();
         }
     }
+    
+    // Update modality status summary
+    updateModalityStatusSummary();
+    
     if (hasAny) updateSteps(2);
+}
+
+function updateModalityStatusSummary() {
+    const summary = document.getElementById('modalityStatusSummary');
+    const chipsContainer = document.getElementById('modalityStatusChips');
+    
+    if (!summary || !chipsContainer) return;
+    
+    const modalities = [
+        { key: 'speech', label: 'Speech', icon: 'fa-microphone', color: 'accent' },
+        { key: 'handwriting', label: 'Handwriting', icon: 'fa-pen', color: 'success' },
+        { key: 'gait', label: 'Gait', icon: 'fa-walking', color: 'warning' }
+    ];
+    
+    const readyModalities = modalities.filter(mod => extractedFeatures[mod.key] !== null);
+    
+    if (readyModalities.length === 0) {
+        summary.style.display = 'none';
+        return;
+    }
+    
+    summary.style.display = 'block';
+    
+    const chipsHtml = readyModalities.map(mod => 
+        `<span class="chip chip-${mod.color}">
+            <i class="fas ${mod.icon}"></i> ${mod.label}
+        </span>`
+    ).join('');
+    
+    chipsContainer.innerHTML = chipsHtml;
+}
+
+function showFileReplaceConfirmation(fileName, callback) {
+    const modal = document.getElementById('fileReplaceModal');
+    const message = document.getElementById('fileReplaceMessage');
+    const confirmBtn = document.getElementById('confirmReplaceBtn');
+    
+    if (!modal || !message || !confirmBtn) {
+        // Fallback to native confirm if modal elements not found
+        return confirm(`Replace "${fileName}" with a new file?`);
+    }
+    
+    message.textContent = `Do you want to replace "${fileName}" with a new file? This action cannot be undone.`;
+    
+    // Remove any existing event listeners
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    
+    // Add new event listener
+    newConfirmBtn.addEventListener('click', function() {
+        const modalInstance = bootstrap.Modal.getInstance(modal);
+        if (modalInstance) {
+            modalInstance.hide();
+        }
+        callback(true);
+    });
+    
+    // Show modal
+    const modalInstance = new bootstrap.Modal(modal);
+    modalInstance.show();
+    
+    // Handle modal close/cancel as false
+    modal.addEventListener('hidden.bs.modal', function handler() {
+        modal.removeEventListener('hidden.bs.modal', handler);
+        // Only call callback(false) if the modal was closed without confirmation
+        // The confirmation button handles callback(true)
+    });
+}
+
+function initTouchGestures() {
+    // Only enable on mobile devices
+    if (window.innerWidth > 768) return;
+    
+    const tabContent = document.querySelector('.tab-content');
+    if (!tabContent) return;
+    
+    let startX = 0;
+    let startY = 0;
+    let isSwipe = false;
+    
+    const tabs = ['speech', 'handwriting', 'gait', 'combined'];
+    
+    function getCurrentTabIndex() {
+        return tabs.indexOf(currentActiveTab);
+    }
+    
+    function switchToTab(index) {
+        if (index >= 0 && index < tabs.length) {
+            const tabElement = document.querySelector(`#${tabs[index]}-tab`);
+            if (tabElement) {
+                const tabInstance = new bootstrap.Tab(tabElement);
+                tabInstance.show();
+            }
+        }
+    }
+    
+    tabContent.addEventListener('touchstart', function(e) {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        isSwipe = false;
+    });
+    
+    tabContent.addEventListener('touchmove', function(e) {
+        if (!startX || !startY) return;
+        
+        const deltaX = Math.abs(e.touches[0].clientX - startX);
+        const deltaY = Math.abs(e.touches[0].clientY - startY);
+        
+        // Determine if this is a horizontal swipe
+        if (deltaX > deltaY && deltaX > 30) {
+            isSwipe = true;
+            e.preventDefault(); // Prevent scrolling
+        }
+    });
+    
+    tabContent.addEventListener('touchend', function(e) {
+        if (!isSwipe || !startX) return;
+        
+        const endX = e.changedTouches[0].clientX;
+        const deltaX = endX - startX;
+        const currentIndex = getCurrentTabIndex();
+        
+        // Swipe right (previous tab)
+        if (deltaX > 50 && currentIndex > 0) {
+            switchToTab(currentIndex - 1);
+        }
+        // Swipe left (next tab)
+        else if (deltaX < -50 && currentIndex < tabs.length - 1) {
+            switchToTab(currentIndex + 1);
+        }
+        
+        // Reset
+        startX = 0;
+        startY = 0;
+        isSwipe = false;
+    });
+}
+
+function initAccessibilityFeatures() {
+    // Add ARIA attributes to upload zones
+    const uploadZones = document.querySelectorAll('.upload-zone');
+    uploadZones.forEach(function(zone, index) {
+        if (!zone.hasAttribute('tabindex')) {
+            zone.setAttribute('tabindex', '0');
+        }
+        if (!zone.hasAttribute('role')) {
+            zone.setAttribute('role', 'button');
+        }
+        
+        // Add specific labels based on zone ID
+        const zoneId = zone.id;
+        let ariaLabel = 'Upload file';
+        if (zoneId.includes('audio') || zoneId.includes('Speech')) {
+            ariaLabel = 'Upload audio file for speech analysis';
+        } else if (zoneId.includes('handwriting') || zoneId.includes('Handwriting')) {
+            ariaLabel = 'Upload handwriting image for analysis';
+        } else if (zoneId.includes('gait') || zoneId.includes('Gait')) {
+            ariaLabel = 'Upload gait video for analysis';
+        }
+        
+        zone.setAttribute('aria-label', ariaLabel);
+    });
+    
+    // Add ARIA hidden to decorative icons
+    const decorativeIcons = document.querySelectorAll('.upload-icon i, .step-num, .step-line');
+    decorativeIcons.forEach(function(icon) {
+        icon.setAttribute('aria-hidden', 'true');
+    });
+    
+    // Improve button accessibility
+    const buttons = document.querySelectorAll('button:not([aria-label]):not([aria-labelledby])');
+    buttons.forEach(function(button) {
+        const text = button.textContent.trim();
+        if (text && !button.getAttribute('aria-label')) {
+            button.setAttribute('aria-label', text);
+        }
+    });
+    
+    // Add live region for dynamic updates
+    if (!document.getElementById('aria-live-region')) {
+        const liveRegion = document.createElement('div');
+        liveRegion.id = 'aria-live-region';
+        liveRegion.setAttribute('aria-live', 'polite');
+        liveRegion.setAttribute('aria-atomic', 'true');
+        liveRegion.className = 'sr-only';
+        document.body.appendChild(liveRegion);
+    }
+}
+
+function announceToScreenReader(message) {
+    const liveRegion = document.getElementById('aria-live-region');
+    if (liveRegion) {
+        liveRegion.textContent = message;
+        // Clear after announcement
+        setTimeout(() => {
+            liveRegion.textContent = '';
+        }, 1000);
+    }
 }
 
 /* ------------------------------------------------------------------ */
