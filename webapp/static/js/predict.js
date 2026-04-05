@@ -118,7 +118,11 @@ $(document).ready(function () {
 
     // Track file selections
     $('#audioFileInput').change(function () {
-        if (this.files && this.files[0]) uploadedFilenames.speech = this.files[0].name;
+        if (this.files && this.files[0]) {
+            uploadedFilenames.speech = this.files[0].name;
+            $('#audioFileName').text(this.files[0].name);
+            $('#audioPreview').show();
+        }
     });
     $('#handwritingFileInput').change(function () {
         if (this.files && this.files[0]) uploadedFilenames.handwriting = this.files[0].name;
@@ -724,7 +728,7 @@ function displayResults(response, modalitiesUsed, totalFeatures) {
     if (isAdvanced) {
         $('#modelTypeBadgeContainer').html('<span class="model-type-badge dl"><i class="fas fa-brain"></i> Advanced AI Model</span>');
     } else {
-        $('#modelTypeBadgeContainer').html('<span class="model-type-badge sklearn"><i class="fas fa-cogs"></i> Machine Learning Model</span>');
+        $('#modelTypeBadgeContainer').html('<span class="model-type-badge dl"><i class="fas fa-brain"></i> Deep Learning Model</span>');
     }
 
     // Detection icon and label
@@ -912,6 +916,7 @@ function resetForm() {
 
     // Hide previews
     $('#handwritingPreview').hide();
+    $('#audioPreview').hide();
 
     // Stop recording
     if (isRecording) stopRecording();
