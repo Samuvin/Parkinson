@@ -46,27 +46,27 @@ class ICalibrator(ABC):
         pass
 
 
-class IPredictionService(ABC):
-    """Interface for prediction services."""
-    
+class IDetectionService(ABC):
+    """Interface for multi-modal detection services."""
+
     @abstractmethod
-    def predict_single_modality(
-        self, 
-        modality: str, 
+    def detect_single_modality(
+        self,
+        modality: str,
         features: np.ndarray
     ) -> Dict[str, Any]:
-        """Predict using a single modality."""
+        """Run detection for one modality."""
         pass
-    
+
     @abstractmethod
-    def predict_ensemble(
+    def detect_ensemble(
         self,
         speech_features: Optional[np.ndarray] = None,
         handwriting_features: Optional[np.ndarray] = None,
         gait_features: Optional[np.ndarray] = None,
         **kwargs
     ) -> Dict[str, Any]:
-        """Predict using ensemble of modalities."""
+        """Run ensemble detection across modalities."""
         pass
 
 

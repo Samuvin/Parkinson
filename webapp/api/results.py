@@ -1,11 +1,11 @@
-"""Results API endpoints for retrieving prediction history."""
+"""Results API endpoints for retrieving detection history."""
 
 import logging
 from flask import Blueprint, request, jsonify, g
 
-from webapp.models.prediction_result import (
+from webapp.models.detection_result import (
     find_by_user_id,
-    search_predictions,
+    search_detections,
     find_by_id,
     count_by_user_id
 )
@@ -18,7 +18,7 @@ results_bp = Blueprint('results', __name__)
 @results_bp.route('/results', methods=['GET'])
 def get_results():
     """
-    Get user's prediction results with optional filters.
+    Get user's detection results with optional filters.
 
     Query parameters:
         - limit: Maximum number of results (default: 50)
@@ -59,8 +59,7 @@ def get_results():
         if request.args.get('max_confidence') is not None:
             filters['max_confidence'] = request.args.get('max_confidence', type=float)
 
-        # Search predictions
-        results = search_predictions(user_id, filters)
+        results = search_detections(user_id, filters)
         total_count = count_by_user_id(user_id)
 
         return jsonify({
@@ -85,13 +84,13 @@ def get_results():
 @results_bp.route('/results/<result_id>', methods=['GET'])
 def get_result_by_id(result_id):
     """
-    Get a specific prediction result by ID.
+    Get a specific stored result by ID.
 
     Args:
-        result_id: MongoDB ObjectId of the prediction result.
+        result_id: MongoDB ObjectId of the result.
 
     Returns:
-        JSON response with the prediction result.
+        JSON response with the result document.
     """
     try:
         if not hasattr(g, 'current_user') or not g.current_user:

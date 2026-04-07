@@ -1,4 +1,4 @@
-# Columns loaded from CSV for multimodal deep learning (train_dl.py, dl_models/dataset.py).
+# Columns loaded from CSV for multimodal deep learning (train_dl.py, dl_models/data/dataset.py).
 # Paths are relative to data.raw_dir (e.g. data/raw).
 
 label_column: status

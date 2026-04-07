@@ -3,10 +3,10 @@ Dependency Injection Container (DI Container pattern).
 Implements Inversion of Control (IoC) for better testability and flexibility.
 """
 
-from src.core.interfaces import IPredictionService, IModelLoader, ICalibrator
+from src.core.interfaces import IDetectionService, IModelLoader, ICalibrator
 from src.services.model_loader_service import FileSystemModelLoader
 from src.services.calibration_service import CalibrationServiceFactory
-from src.services.prediction_service import MultiModalPredictionService
+from src.services.detection_service import MultiModalDetectionService
 from src.config.settings import get_config_manager, ApplicationConfig
 
 
@@ -55,24 +55,24 @@ class ServiceContainer:
             )
         return self._services['calibrator']
     
-    def get_prediction_service(self) -> IPredictionService:
+    def get_detection_service(self) -> IDetectionService:
         """
-        Get prediction service (singleton within container).
-        
+        Get detection service (singleton within container).
+
         Dependencies are automatically resolved and injected.
-        
+
         Returns:
-            Prediction service instance
+            Detection service instance
         """
-        if 'prediction_service' not in self._services:
+        if 'detection_service' not in self._services:
             model_loader = self.get_model_loader()
             calibrator = self.get_calibrator()
-            
-            self._services['prediction_service'] = MultiModalPredictionService(
+
+            self._services['detection_service'] = MultiModalDetectionService(
                 model_loader=model_loader,
                 calibrator=calibrator
             )
-        return self._services['prediction_service']
+        return self._services['detection_service']
     
     def reset(self):
         """Reset all services (useful for testing)."""
@@ -117,15 +117,15 @@ class ContainerFactory:
         cls._default_container = None
 
 
-def get_prediction_service() -> IPredictionService:
+def get_detection_service() -> IDetectionService:
     """
-    Convenience function to get prediction service.
-    
+    Convenience function to get detection service.
+
     This is the main entry point for the application.
-    
+
     Returns:
-        Prediction service with all dependencies resolved
+        Detection service with all dependencies resolved
     """
     container = ContainerFactory.get_default_container()
-    return container.get_prediction_service()
+    return container.get_detection_service()
 

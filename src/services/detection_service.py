@@ -1,78 +1,64 @@
 """
-Prediction service implementing business logic.
-Follows Dependency Inversion Principle - depends on abstractions, not concretions.
+Detection service implementing business logic.
+Follows Dependency Inversion Principle — depends on abstractions, not concretions.
 """
 
 import numpy as np
 import logging
 from typing import Dict, List, Optional, Any
 from src.core.interfaces import (
-    IPredictionService, 
-    IModelLoader, 
+    IDetectionService,
+    IModelLoader,
     ICalibrator
 )
 from src.core.entities import (
-    PredictionResult, 
-    EnsemblePredictionResult, 
+    PredictionResult,
+    EnsemblePredictionResult,
     FeatureVector
 )
 
 logger = logging.getLogger(__name__)
 
 
-class MultiModalPredictionService(IPredictionService):
+class MultiModalDetectionService(IDetectionService):
     """
-    Service for multi-modal PD predictions.
-    
+    Service for multi-modal PD detection.
+
     Dependencies are injected (DIP), making it testable and flexible.
     """
-    
+
     def __init__(
-        self, 
+        self,
         model_loader: IModelLoader,
         calibrator: ICalibrator
     ):
-        """
-        Initialize with dependencies.
-        
-        Args:
-            model_loader: Service for loading models
-            calibrator: Service for calibrating confidence
-        """
         self._model_loader = model_loader
         self._calibrator = calibrator
         self._available_modalities = ['speech', 'handwriting', 'gait']
-    
-    def predict_single_modality(
-        self, 
-        modality: str, 
+
+    def detect_single_modality(
+        self,
+        modality: str,
         features: np.ndarray
     ) -> Dict[str, Any]:
         """
-        Predict using single modality.
-        
-        Args:
-            modality: One of speech/handwriting/gait
-            features: Input features
-            
-        Returns:
-            Prediction result dictionary
+        Run detection using a single modality (sklearn ``predict`` under the hood).
         """
         if modality not in self._available_modalities:
             raise ValueError(f"Unknown modality: {modality}")
-        
+
         model = self._model_loader.load_model(modality)
         scaler = self._model_loader.load_scaler(modality)
-        
+
         if not model or not scaler:
             raise RuntimeError(f"Model or scaler not available for: {modality}")
-        
+
         feature_vec = FeatureVector(modality=modality, features=features)
         scaled_features = scaler.transform(feature_vec.features)
-        
+
         prediction = model.predict(scaled_features)
         probabilities = model.predict_proba(scaled_features)
-        
+
         result = PredictionResult(
             prediction=prediction,
             prediction_label='Parkinson\'s Disease' if prediction == 1 else 'Healthy',
@@ -83,10 +69,10 @@ class MultiModalPredictionService(IPredictionService):
             },
             modality=modality
         )
-        
+
         return result.to_dict()
-    
-    def predict_ensemble(
+
+    def detect_ensemble(
         self,
         speech_features: Optional[np.ndarray] = None,
         handwriting_features: Optional[np.ndarray] = None,
@@ -94,41 +80,39 @@ class MultiModalPredictionService(IPredictionService):
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Predict using ensemble of available modalities.
-        
-        Implements soft voting with calibration.
+        Ensemble detection over available modalities (soft/hard voting + calibration).
         """
         features_map = {
             'speech': speech_features,
             'handwriting': handwriting_features,
             'gait': gait_features
         }
-        
+
         available = {k: v for k, v in features_map.items() if v is not None}
-        
+
         if not available:
-            raise ValueError("At least one modality required for prediction")
-        
+            raise ValueError("At least one modality required for detection")
+
         individual_results = {}
-        for modality, features in available.items():
+        for modality, feats in available.items():
             try:
-                result = self.predict_single_modality(modality, features)
+                result = self.detect_single_modality(modality, feats)
                 individual_results[modality] = PredictionResult(**result)
             except Exception as e:
-                logger.error(f"Prediction failed for {modality}: {e}")
-        
+                logger.error("Detection failed for %s: %s", modality, e)
+
         if not individual_results:
-            raise RuntimeError("All modality predictions failed")
-        
+            raise RuntimeError("All modality detections failed")
+
         ensemble_result = self._compute_ensemble(
-            individual_results, 
+            individual_results,
             list(available.values()),
             kwargs.get('voting_method', 'soft'),
             kwargs.get('calibration_context', {})
         )
-        
+
         return ensemble_result.to_dict()
-    
+
     def _compute_ensemble(
         self,
         individual_results: Dict[str, PredictionResult],
@@ -136,29 +120,28 @@ class MultiModalPredictionService(IPredictionService):
         voting_method: str,
         calibration_context: Dict
     ) -> EnsemblePredictionResult:
-        """Compute ensemble prediction from individual results."""
+        """Compute ensemble output from per-modality results."""
         if len(individual_results) == 1:
             single_result = list(individual_results.values())[0]
             return self._create_single_modality_result(
-                single_result, 
+                single_result,
                 individual_results,
                 feature_vectors,
                 calibration_context
             )
-        
+
         if voting_method == 'soft':
             return self._soft_voting_ensemble(
                 individual_results,
                 feature_vectors,
                 calibration_context
             )
-        else:
-            return self._hard_voting_ensemble(
-                individual_results,
-                feature_vectors,
-                calibration_context
-            )
-    
+        return self._hard_voting_ensemble(
+            individual_results,
+            feature_vectors,
+            calibration_context
+        )
+
     def _soft_voting_ensemble(
         self,
         results: Dict[str, PredictionResult],
@@ -168,16 +151,16 @@ class MultiModalPredictionService(IPredictionService):
         """Soft voting by averaging probabilities."""
         avg_healthy = np.mean([r.probabilities['healthy'] for r in results.values()])
         avg_pd = np.mean([r.probabilities['parkinsons'] for r in results.values()])
-        
+
         prediction = 1 if avg_pd > avg_healthy else 0
-        
+
         calibrated = self._calibrator.calibrate(
             prediction=prediction,
             probabilities={'healthy': avg_healthy, 'parkinsons': avg_pd},
             features=features,
             context=context
         )
-        
+
         return EnsemblePredictionResult(
             prediction=calibrated['prediction'],
             prediction_label=calibrated['prediction_label'],
@@ -187,7 +170,7 @@ class MultiModalPredictionService(IPredictionService):
             individual_predictions=results,
             ensemble_method='soft'
         )
-    
+
     def _hard_voting_ensemble(
         self,
         results: Dict[str, PredictionResult],
@@ -197,10 +180,10 @@ class MultiModalPredictionService(IPredictionService):
         """Hard voting by majority."""
         predictions = [r.prediction for r in results.values()]
         prediction = 1 if sum(predictions) > len(predictions) / 2 else 0
-        
+
         agreeing = [r.confidence for r in results.values() if r.prediction == prediction]
         confidence = float(np.mean(agreeing)) if agreeing else 0.5
-        
+
         calibrated = self._calibrator.calibrate(
             prediction=prediction,
             probabilities={
@@ -210,7 +193,7 @@ class MultiModalPredictionService(IPredictionService):
             features=features,
             context=context
         )
-        
+
         return EnsemblePredictionResult(
             prediction=calibrated['prediction'],
             prediction_label=calibrated['prediction_label'],
@@ -220,7 +203,7 @@ class MultiModalPredictionService(IPredictionService):
             individual_predictions=results,
             ensemble_method='hard'
         )
-    
+
     def _create_single_modality_result(
         self,
         single_result: PredictionResult,
@@ -228,14 +211,14 @@ class MultiModalPredictionService(IPredictionService):
         features: List,
         context: Dict
     ) -> EnsemblePredictionResult:
-        """Create ensemble result for single modality."""
+        """Build ensemble-shaped result when only one modality ran."""
         calibrated = self._calibrator.calibrate(
             prediction=single_result.prediction,
             probabilities=single_result.probabilities,
             features=features,
             context=context
         )
-        
+
         return EnsemblePredictionResult(
             prediction=calibrated['prediction'],
             prediction_label=calibrated['prediction_label'],
@@ -245,4 +228,3 @@ class MultiModalPredictionService(IPredictionService):
             individual_predictions=all_results,
             ensemble_method='single_modality'
         )
-

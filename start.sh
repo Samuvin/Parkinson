@@ -64,13 +64,12 @@ pkill -f "wsgi.py" 2>/dev/null
 sleep 2
 echo ""
 
-# Step 5: Start the server (full mode)
-export USE_LIGHT_MODE=0
-print_success "Starting server (full mode - all ML libraries enabled)..."
+# Step 5: Start the server
+print_success "Starting server (ML libraries and file processing enabled)..."
 echo ""
 echo "============================================================"
 echo "  URL: http://localhost:8000"
-echo "  Mode: Full (with ML libraries and file processing)"
+echo "  Mode: Standard (ML libraries and file processing)"
 echo "============================================================"
 echo ""
 print_info "Press Ctrl+C to stop the server"

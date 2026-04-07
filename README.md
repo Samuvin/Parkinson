@@ -1,204 +1,74 @@
-# Parkinson's Disease Early Prediction System
+# Parkinson’s disease detection (multimodal DL + web app)
 
-A Parkinson's Disease prediction system with a **voice-first** training path (tabular speech / UCI-style features) and an optional **multimodal** deep-learning path (speech + handwriting + gait).
-
-## Project Overview
-
-Parkinson's Disease is the second most common neurodegenerative disorder, causing tremors, stiffness, and slow movement. Early prediction is crucial for improving patient outcomes. **By default, focus on voice:** [`train.py`](train.py) trains classical models on **22 speech features** from [`data/raw/speech/parkinsons.csv`](data/raw/speech/parkinsons.csv). When you are ready, [`train_dl.py`](train_dl.py) can use **SE-ResNet with attention fusion** across speech, handwriting, and gait with explainability (Grad-CAM).
-
-## Methodology
-
-- **Voice-first**: sklearn pipeline in [`train.py`](train.py) — speech only (22 features)
-- **Multimodal (optional)**: SE-ResNet 1D + attention fusion in [`train_dl.py`](train_dl.py) — speech (22) + handwriting (10) + gait (10)
-- **Explainability**: Grad-CAM and attention (multimodal DL path)
-- **Class balancing**: preprocessor options in [`train.py`](train.py); SMOTE in [`train_dl.py`](train_dl.py)
-- **Framework**: PyTorch for multimodal DL; sklearn for the voice-first path
-- **Fallback**: sklearn ensemble (SVM + LR) when DL model is not available
-- **Deployment**: Flask + Waitress WSGI server (Windows/Linux/Mac) with JWT authentication
-
-## Datasets
-
-See **[DATASETS.md](DATASETS.md)** for exact CSV paths, column names, row-alignment behavior, and download scripts.
-
-### 1. Speech (voice) — start here
-- **File**: `data/raw/speech/parkinsons.csv`
-- **Source**: [UCI Parkinsons (174)](https://archive.ics.uci.edu/dataset/174/parkinsons) and common mirrors (e.g. [GitHub `parkinsons.csv`](https://raw.githubusercontent.com/SagarBapodara/Parkison-Disease-Detection-using-Machine-Learning/main/Data/parkinsons.csv))
-- **Features**: 22 acoustic measurements (jitter, shimmer, HNR, pitch, nonlinear dynamics)
-- **Used by**: [`train.py`](train.py) (and multimodal [`train_dl.py`](train_dl.py))
-
-### 2. Handwriting & gait (optional — multimodal DL only)
-- Needed only for [`train_dl.py`](train_dl.py). See **DATASETS.md** for paths, provenance, and how they differ from off-the-shelf Kaggle/UCI CSVs.
-
-## Installation
-
-### Prerequisites
-- Python 3.8+
-- pip
-
-### Setup
-
-```bash
-cd Parkinson   # repository root (use your actual clone path)
-
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate   # macOS/Linux
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy and configure environment variables
-cp .env.example .env
-# Edit .env with your MONGODB_URI and JWT_SECRET_KEY
-```
-
-## Project Structure
-
-```
-.
-├── dl_models/            # Deep learning modules
-│   ├── networks.py       # SE-ResNet + Attention Fusion architecture
-│   ├── dataset.py        # PyTorch dataset for multimodal data
-│   ├── trainer.py        # Training loop with early stopping
-│   ├── inference.py      # DL predictor for production inference
-│   └── gradcam.py        # Grad-CAM explainability
-├── common/               # Shared multimodal feature extraction (speech / handwriting / gait)
-├── notebooks/            # Jupyter staff demo (multimodal: tabular + raw WAV/image/video samples)
-├── src/                  # sklearn fallback and utilities
-│   ├── core/             # Model manager, predictor
-│   ├── data/             # Data loading and preprocessing
-│   ├── models/           # sklearn model implementations
-│   ├── evaluation/       # Evaluation metrics
-│   └── utils/            # Configuration utilities
-├── webapp/               # Flask web application
-│   ├── app.py            # Application factory
-│   ├── api/              # REST API (predict, auth, upload)
-│   ├── middleware/        # JWT authentication middleware
-│   ├── models/           # User model (MongoDB)
-│   ├── templates/        # Jinja2 HTML templates
-│   └── static/           # CSS, JS, images
-├── models/               # Saved trained models (.joblib, .pt)
-├── data/                 # Datasets
-├── scripts/              # Maintenance and training helpers
-│   └── train_voice_pipeline.py  # Optional CSV download + voice train + reports/
-├── train.py              # sklearn training pipeline
-├── train_dl.py           # Deep learning training pipeline
-├── wsgi.py               # WSGI entry point (Waitress)
-├── config.yaml           # Hyperparameters and paths
-└── requirements.txt      # Python dependencies
-```
-
-## Usage
-
-### 1. Train the Deep Learning Model
-
-```bash
-python train_dl.py
-```
-
-This trains the SE-ResNet + Attention Fusion model and saves:
-- Model weights to `models/multimodal_pdnet.pt`
-- Feature scalers to `models/dl_*_scaler.joblib`
-- Training plots and metrics
-
-### 2. Run the Application
-
-- **Full mode (default for this project):** all ML libraries, uploads, and file processing — **Linux/macOS:** `./start-full.sh`
-- **Light mode:** minimal dependencies and custom prediction logic only — **Linux/macOS:** `./start.sh` · **Windows:** `start.bat`
-
-Or manually (any platform), after activating `venv` and installing `requirements.txt`:
-
-```bash
-export USE_LIGHT_MODE=0   # full mode; omit or set to 1 for light mode
-python wsgi.py
-```
-
-The server listens on port **8000** by default (override with the `PORT` environment variable). Visit `http://localhost:8000` in your browser.
-
-### 3. Stop the Application
-
-```bash
-./stop.sh
-```
-
-### 4. Staff demo: voice pipeline + Jupyter
-
-1. Train and export reports under `reports/`:
-   ```bash
-   python scripts/train_voice_pipeline.py
-   ```
-   Optional: `--download-speech` refreshes CSVs under `data/raw/speech/` from the same fixed HTTPS sources as `data/raw/speech/download_speech_csvs.sh`.
-
-2. Install notebook dependencies: `pip install -r requirements-notebooks.txt`
-
-3. Example WAVs for the staff notebook are **synthetic** and live under `data/examples/speech/`; regenerate with `python scripts/generate_example_speech_wavs.py` if needed (see that folder’s README).
-
-4. From the repository root, start Jupyter and open `notebooks/parkinson_multimodal_staff_demo.ipynb` (speech + handwriting + gait; demo media lives in `notebooks/sample/`).
-
-5. Optional headless check (after installing `requirements-notebooks.txt`; needs network for OpenCV sample downloads):  
-   `MPLBACKEND=Agg jupyter nbconvert --to notebook --execute notebooks/parkinson_multimodal_staff_demo.ipynb --output /tmp/parkinson_multimodal_staff_demo-executed.ipynb --ExecutePreprocessor.timeout=600`
-
-Upload-time feature extraction and this notebook both use the shared **`common/`** package (speech, handwriting, gait), separate from **`webapp/`** and **`src/utils/`** (config).
-
-## Architecture
-
-### SE-ResNet 1D + Attention Fusion
-
-Each modality is processed by its own SE-ResNet branch:
-1. **1D Convolution** - Extracts local patterns from feature vectors
-2. **Residual SE Blocks** - Skip connections + Squeeze-and-Excitation channel attention
-3. **Attention Fusion** - Learned weights combine modality embeddings
-4. **Dense Classifier** - Final prediction with dropout regularization
-
-### Explainability
-
-- **Grad-CAM**: Per-feature importance scores showing which inputs drive the prediction
-- **Attention Weights**: How much each modality (speech, handwriting, gait) contributes
-- **SE Channel Weights**: Internal channel attention within each modality branch
-
-## API Endpoints
-
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/api/health` | GET | No | Health check and model status |
-| `/api/predict` | POST | Yes | Single prediction |
-| `/api/predict_batch` | POST | Yes | Batch predictions |
-| `/api/model_info` | GET | Yes | Model information |
-| `/api/auth/register` | POST | No | User registration |
-| `/api/auth/login` | POST | No | User login |
-| `/api/auth/logout` | POST | Yes | User logout |
-| `/api/upload/audio` | POST | Yes | Upload audio for speech features |
-| `/api/upload/handwriting` | POST | Yes | Upload image for handwriting features |
-| `/api/upload/gait` | POST | Yes | Upload video for gait features |
-
-## Configuration
-
-Edit `config.yaml` to adjust:
-- Deep learning hyperparameters (learning rate, epochs, architecture)
-- Data split ratios
-- Feature extraction parameters
-- Server settings
-
-Environment variables (`.env`):
-- `MONGODB_URI` - MongoDB connection string
-- `JWT_SECRET_KEY` - Secret key for JWT token signing
-
-## Testing
-
-Run lightweight checks (e.g. voice pipeline script URL policy):
-
-```bash
-python -m unittest tests.test_voice_pipeline
-```
-
-## Tech Stack
-
-- **Backend**: Flask, Waitress, PyTorch
-- **Frontend**: Jinja2, Bootstrap 5, Chart.js
-- **Database**: MongoDB (user auth)
-- **Auth**: JWT (PyJWT + bcrypt)
-- **ML Fallback**: scikit-learn, XGBoost, LightGBM
+This repo trains a **multimodal** model on tabular speech, handwriting, and gait features and serves a **Flask** UI plus JSON APIs. Feature extraction from raw media lives under [`common/`](common/).
 
 ---
 
-**Disclaimer**: This system is for research and educational purposes only. It is not intended for clinical diagnosis. Always consult healthcare professionals for medical advice.
+## How the web app runs when you open a URL
+
+1. **Process start** — You run `python wsgi.py` (or Waitress/`start.sh`/`start.bat`). [`wsgi.py`](wsgi.py) loads [`.env`](.env.example) from the project root, then imports `app = create_app()` from [`webapp/app.py`](webapp/app.py).
+
+2. **`create_app()`** — Builds the Flask app, reads config via [`src/utils/config.py`](src/utils/config.py), registers blueprints under `/api` (detect, auth, upload, combined processing, results), and runs [`get_manager()`](webapp/api/detect.py) so legacy sklearn models load at startup if present. It attaches [`enforce_auth`](webapp/middleware/auth.py) as a **`before_request`** hook.
+
+3. **Browser navigation (pages)** — For paths like `/`, `/login`, `/detect`, `/model-report`, `/about`, `/results`, the request path does **not** start with `/api/`. [`enforce_auth`](webapp/middleware/auth.py) returns immediately for those routes, so no JWT is required. The matching view in [`webapp/app.py`](webapp/app.py) runs (for example `index()` → `render_template('index.html')`, `detect_page()` → `detect.html`).
+
+4. **Static assets** — Normal Flask `static` handling; auth middleware skips enforcement for the static endpoint.
+
+---
+
+## What runs when the user provides input (API / detection)
+
+Typical flow: the front end (or a client) calls **`POST /api/detect`** with JSON after the user signs in and obtains a token.
+
+1. **`before_request`** — Because the path is `/api/detect`, [`enforce_auth`](webapp/middleware/auth.py) runs. It allows only the documented public API routes without a token (for example `GET /api/health`, `GET /api/training_report`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`). **`POST /api/detect` requires a valid `Authorization: Bearer <jwt>`** header.
+
+2. **Detection handler** — [`run_detection`](webapp/api/detect.py) in [`webapp/api/detect.py`](webapp/api/detect.py) runs:
+   - Parses JSON from the body.
+   - Validates optional `speech_features` (22 floats), `handwriting_features` (10), `gait_features` (10); at least one modality must be present.
+   - Calls **`_build_detect_json_payload(...)`** (same module) to assemble the response (including presentation fields aligned with the multimodal network).
+   - If the user is authenticated, tries to persist via [`save_detection`](webapp/models/detection_result.py).
+   - Returns JSON to the client.
+
+Other API routes (upload, batch detect, combined processing, etc.) are registered in [`webapp/app.py`](webapp/app.py) from [`webapp/api/`](webapp/api/); they follow the same **`/api/*` + JWT** rule unless listed as public in the middleware.
+
+---
+
+## Quick setup
+
+```bash
+cd Parkinson   # your clone path
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env       # set MONGODB_URI, JWT_SECRET_KEY, etc.
+python wsgi.py             # http://0.0.0.0:8000 by default (PORT env overrides)
+```
+
+---
+
+## Training and data layout
+
+- **Train multimodal DL:** [`train_dl.py`](train_dl.py) — CSV paths and feature column names come from [`config/multimodal_features.yaml`](config/multimodal_features.yaml) (referenced by [`config/project.yaml`](config/project.yaml)).
+- **Aligned CSVs:** under `data/raw/speech/`, `data/raw/handwriting/`, `data/raw/gait/`. Loaders truncate to the **minimum row count** across modalities and use **speech** for labels when training that path; see [`dl_models/data/dataset.py`](dl_models/data/dataset.py).
+- **Refresh speech CSVs:** `bash data/raw/speech/download_speech_csvs.sh` or `python scripts/train_voice_pipeline.py --download-speech`.
+- **Jupyter staff demo:** [`notebooks/parkinson_multimodal_staff_demo.ipynb`](notebooks/parkinson_multimodal_staff_demo.ipynb) — see [`notebooks/README.md`](notebooks/README.md).
+
+### Config → data → train → view model scores
+
+1. **Features (config)** — Speech, handwriting, and gait **column names** and **CSV paths** (relative to `data.raw_dir`) are defined in [`config/multimodal_features.yaml`](config/multimodal_features.yaml), referenced by `data.multimodal_features_config` in [`config/project.yaml`](config/project.yaml).
+2. **Data** — Put aligned tabular CSVs under `data/raw/` as in that YAML, **or** derive matching vectors from raw WAV / images / video using [`common/`](common/) so the numbers line up with those columns.
+3. **Train** — Run [`train_dl.py`](train_dl.py). It writes `models/multimodal_pdnet.pt`, `models/dl_scalers.joblib`, `models/dl_model_metrics.json`, and plots (`dl_roc_curve.png`, etc.).
+4. **View scores in the browser** — With the app running, open **`/model-report`** (nav: **Model scores**). Same data as the public JSON **`GET /api/training_report`** (no JWT). Plots load from **`/model_images/...`**.
+
+---
+
+## Layout (short)
+
+| Area | Role |
+|------|------|
+| [`webapp/`](webapp/) | Flask app, templates, API blueprints |
+| [`dl_models/`](dl_models/) | Networks, dataset, training, `DLDetector` inference |
+| [`common/`](common/) | Raw speech / handwriting / gait feature extraction |
+| [`src/`](src/) | Config, optional sklearn joblib loaders, utilities |
+| [`models/`](models/) | Saved checkpoints (`.pt`, optional `.joblib`) |
+| [`data/raw/`](data/raw/) | Training CSVs |

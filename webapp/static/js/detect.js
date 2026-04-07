@@ -1,5 +1,5 @@
 /**
- * predict.js — Detection page logic.
+ * detect.js — Detection page logic.
  *
  * Fixes from plan:
  *  1. Tab switch no longer clears extractedFeatures (data preserved across tabs).
@@ -70,56 +70,44 @@ const FEATURE_NAMES = {
         'gait_asymmetry'
     ]
 };
-let currentActiveTab = 'speech'; // Track the current active tab
 
-/* ------------------------------------------------------------------ */
-/*  Light Mode Detection                                               */
-/* ------------------------------------------------------------------ */
-
-function checkLightMode() {
-    // Test if upload endpoints are available by checking health endpoint
-    fetch('/api/health')
-        .then(function(response) { return response.json(); })
-        .then(function(data) {
-            if (data.active_backend === 'custom_logic') {
-                enableLightMode();
-            }
-        })
-        .catch(function() {
-            // If health check fails, assume we need to show login message
-        });
-}
-
-function enableLightMode() {
-    // Hide upload sections and show light mode notice
-    $('.upload-zone').each(function() {
-        $(this).addClass('disabled').css('opacity', '0.4');
-        $(this).find('.upload-empty-state p').html('<i class="fas fa-lock"></i> File upload disabled in demo mode');
-        $(this).find('.upload-empty-state .upload-hint').html('<strong>Use example data buttons below instead</strong>');
-    });
-    
-    // Disable upload buttons and change their text
-    $('#uploadAudioBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode');
-    $('#uploadHandwritingBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode');
-    $('#uploadGaitBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode');
-    $('#uploadCombinedBtn').prop('disabled', false).html('<i class="fas fa-bolt"></i> Extract Features');
-    
-    // Hide recording section
-    $('#recordBtn').prop('disabled', true).html('<i class="fas fa-lock"></i> Demo Mode').removeClass('btn-danger').addClass('btn-secondary');
-    $('#recordBtn').closest('.surface-card').css('opacity', '0.4');
-    
-    // Add light mode notice
-    if (!$('#lightModeNotice').length) {
-        $('.container').prepend(
-            '<div id="lightModeNotice" class="alert alert-info mb-4 fade-in-up">' +
-            '<i class="fas fa-info-circle"></i> <strong>Demo Mode Active:</strong> ' +
-            'File uploads are disabled. Use the <strong>example data buttons</strong> below to test the AI prediction system. ' +
-            '<br><small class="mt-1 d-block"><i class="fas fa-lightbulb"></i> ' +
-            'Tip: Files with "pd" in the name will be classified as Parkinson\'s Disease, others as Healthy.</small>' +
-            '</div>'
-        );
+function formatExtractedFeatureValue(v) {
+    var n = Number(v);
+    if (!isFinite(n)) {
+        return String(v);
     }
+    if (n !== 0 && (Math.abs(n) >= 1e6 || Math.abs(n) < 1e-4)) {
+        return n.toExponential(4);
+    }
+    return n.toFixed(4);
 }
+
+function escapeHtmlAttrSafeText(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/"/g, '&quot;');
+}
+
+/** Build feature grid HTML: index, label from `names` or generic, and numeric value. */
+function buildFeatureGridHtml(values, names) {
+    if (!values || values.length === 0) {
+        return '';
+    }
+    var html = '<div class="feature-grid">';
+    for (var i = 0; i < values.length; i++) {
+        var label = (names && i < names.length && names[i]) ? names[i] : ('Feature ' + (i + 1));
+        html += '<div class="feature-item">' +
+            '<span class="feature-number">' + (i + 1) + '</span>' +
+            '<span class="feature-name">' + escapeHtmlAttrSafeText(label) + '</span>' +
+            '<span class="feature-value">' + formatExtractedFeatureValue(values[i]) + '</span>' +
+            '</div>';
+    }
+    html += '</div>';
+    return html;
+}
+
+let currentActiveTab = 'speech'; // Track the current active tab
 
 /* ------------------------------------------------------------------ */
 /*  Bootstrap Ready                                                    */
@@ -257,12 +245,12 @@ $(document).ready(function () {
     });
 
     // Detect & Reset
-    $('#predictBtn').click(function () { makeDetection(); });
+    $('#detectBtn').click(function () { makeDetection(); });
     $('#resetBtn').click(function () { resetForm(); });
 
     // Initialize detect button tooltip (Bootstrap 5)
-    var predictBtn = document.getElementById('predictBtn');
-    if (predictBtn) new bootstrap.Tooltip(predictBtn);
+    var detectBtn = document.getElementById('detectBtn');
+    if (detectBtn) new bootstrap.Tooltip(detectBtn);
 
     // Explainability section toggles (event delegation)
     $(document).on('click', '.dl-section-toggle', function () {
@@ -298,10 +286,7 @@ $(document).ready(function () {
     initDropZone('combinedSpeechDropZone', 'combinedSpeechInput');
     initDropZone('combinedHandwritingDropZone', 'combinedHandwritingInput');
     initDropZone('combinedGaitDropZone', 'combinedGaitInput');
-    
-    // Check for light mode on page load
-    checkLightMode();
-    
+
     // Initialize current tab
     currentActiveTab = 'speech'; // Default to speech tab
     
@@ -892,7 +877,7 @@ function hideExtractLoaderAfter(startTime, callback) {
 }
 
 function scrollDetectButtonIntoView() {
-    var btn = document.getElementById('predictBtn');
+    var btn = document.getElementById('detectBtn');
     if (btn) {
         btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -1051,15 +1036,8 @@ function uploadCombinedVideo() {
     var hasSpeech = speechInput && speechInput.files.length > 0;
     var hasHandwriting = handwritingInput && handwritingInput.files.length > 0;
     var hasGait = gaitInput && gaitInput.files.length > 0;
-    
-    // In light mode, create dummy files for demonstration
-    var isLightMode = $('#uploadCombinedBtn').text().includes('Extract Features') && $('#lightModeNotice').length > 0;
-    if (isLightMode) {
-        // For demo purposes, simulate having all modalities
-        hasSpeech = true;
-        hasHandwriting = true; 
-        hasGait = true;
-    } else if (!hasSpeech && !hasHandwriting && !hasGait) {
+
+    if (!hasSpeech && !hasHandwriting && !hasGait) {
         showNotification('Please select at least one file to extract features from!', 'warning');
         return;
     }
@@ -1078,40 +1056,31 @@ function uploadCombinedVideo() {
     var modalitiesText = modalityDescriptions.join(', ');
 
     var formData = new FormData();
-    var videoFile, videoFilename;
-    
-    if (isLightMode) {
-        // Create a dummy video file for light mode
-        videoFile = new Blob(['dummy video content'], { type: 'video/mp4' });
-        videoFilename = 'demo_combined_pd.mp4'; // Use 'pd' in filename for consistent demo behavior
+    var videoFile;
+    var videoFilename;
+    if (hasGait) {
+        videoFile = gaitInput.files[0];
+        videoFilename = videoFile.name;
+    } else if (hasSpeech) {
+        videoFile = speechInput.files[0];
+        videoFilename = videoFile.name;
     } else {
-        // In real mode, we need to create a combined approach or use the first available file
-        // For now, let's use the gait video as the primary file since it's most likely to contain all modalities
-        if (hasGait) {
-            videoFile = gaitInput.files[0];
-            videoFilename = videoFile.name;
-        } else if (hasSpeech) {
-            videoFile = speechInput.files[0];
-            videoFilename = videoFile.name;
-        } else if (hasHandwriting) {
-            videoFile = handwritingInput.files[0];
-            videoFilename = videoFile.name;
-        }
+        videoFile = handwritingInput.files[0];
+        videoFilename = videoFile.name;
     }
-    
+
     formData.append('video', videoFile);
     formData.append('extract_voice', extractVoice);
     formData.append('extract_handwriting', extractHandwriting);
     formData.append('extract_gait', extractGait);
-    // Set filenames based on what was actually uploaded or demo mode
     if (extractVoice) {
-        uploadedFilenames.speech = isLightMode ? 'demo_speech_pd.mp3' : (hasSpeech ? speechInput.files[0].name : videoFilename);
+        uploadedFilenames.speech = hasSpeech ? speechInput.files[0].name : videoFilename;
     }
     if (extractHandwriting) {
-        uploadedFilenames.handwriting = isLightMode ? 'demo_handwriting_pd.jpg' : (hasHandwriting ? handwritingInput.files[0].name : videoFilename);
+        uploadedFilenames.handwriting = hasHandwriting ? handwritingInput.files[0].name : videoFilename;
     }
     if (extractGait) {
-        uploadedFilenames.gait = isLightMode ? 'demo_gait_pd.mp4' : (hasGait ? gaitInput.files[0].name : videoFilename);
+        uploadedFilenames.gait = hasGait ? gaitInput.files[0].name : videoFilename;
     }
 
     var $btn = $('#uploadCombinedBtn');
@@ -1246,10 +1215,10 @@ function updateDetectButton() {
                  extractedFeatures.handwriting !== null ||
                  extractedFeatures.gait !== null;
 
-    var btn = document.getElementById('predictBtn');
+    var btn = document.getElementById('detectBtn');
     if (btn) {
         btn.disabled = false;
-        $('#predictBtn').prop('disabled', false);
+        $('#detectBtn').prop('disabled', false);
         var tip = bootstrap.Tooltip.getInstance(btn);
         if (tip) {
             btn.setAttribute('data-bs-original-title', 'Run AI detection' + (hasAny ? '' : ' (load example or upload data first)'));
@@ -1509,7 +1478,7 @@ function makeDetection() {
     var MIN_LOADER_MS = getOptimalLoadingTime();
 
     $.ajax({
-        url: '/api/predict',
+        url: '/api/detect',
         type: 'POST',
         contentType: 'application/json',
         data: JSON.stringify(requestData),
@@ -1626,7 +1595,7 @@ function randomizeDisplayResult(response, exampleCategory) {
             parkinsons: Math.round(parkinsonsProb * 1000) / 1000
         },
         modalities_used: response.modalities_used || [],
-        model_type: response.model_type || 'custom_logic'
+        model_type: response.model_type || 'filename_logic'
     };
 }
 
@@ -1717,24 +1686,9 @@ function displayResults(response, modalitiesUsed, totalFeatures) {
 function renderFeatureDetails() {
     var hasAnyFeatures = false;
 
-    // Speech features
     if (extractedFeatures.speech && extractedFeatures.speech.length > 0) {
-        var speechList = $('#speechFeatureList');
-        speechList.empty();
-        
         var speechFeatures = extractedFeatures.speech;
-        var speechNames = FEATURE_NAMES.speech;
-        
-        var html = '<div class="feature-grid">';
-        for (var i = 0; i < speechFeatures.length && i < speechNames.length; i++) {
-            html += '<div class="feature-item">' +
-                '<span class="feature-number">' + (i + 1) + '</span>' +
-                '<span class="feature-name">' + speechNames[i] + '</span>' +
-                '</div>';
-        }
-        html += '</div>';
-        speechList.html(html);
-        
+        $('#speechFeatureList').html(buildFeatureGridHtml(speechFeatures, FEATURE_NAMES.speech));
         $('#speechFeatureCount').text(speechFeatures.length);
         $('#speechFeatureDetails').show();
         hasAnyFeatures = true;
@@ -1742,24 +1696,9 @@ function renderFeatureDetails() {
         $('#speechFeatureDetails').hide();
     }
 
-    // Handwriting features
     if (extractedFeatures.handwriting && extractedFeatures.handwriting.length > 0) {
-        var handwritingList = $('#handwritingFeatureList');
-        handwritingList.empty();
-        
         var handwritingFeatures = extractedFeatures.handwriting;
-        var handwritingNames = FEATURE_NAMES.handwriting;
-        
-        var html = '<div class="feature-grid">';
-        for (var i = 0; i < handwritingFeatures.length && i < handwritingNames.length; i++) {
-            html += '<div class="feature-item">' +
-                '<span class="feature-number">' + (i + 1) + '</span>' +
-                '<span class="feature-name">' + handwritingNames[i] + '</span>' +
-                '</div>';
-        }
-        html += '</div>';
-        handwritingList.html(html);
-        
+        $('#handwritingFeatureList').html(buildFeatureGridHtml(handwritingFeatures, FEATURE_NAMES.handwriting));
         $('#handwritingFeatureCount').text(handwritingFeatures.length);
         $('#handwritingFeatureDetails').show();
         hasAnyFeatures = true;
@@ -1767,24 +1706,9 @@ function renderFeatureDetails() {
         $('#handwritingFeatureDetails').hide();
     }
 
-    // Gait features
     if (extractedFeatures.gait && extractedFeatures.gait.length > 0) {
-        var gaitList = $('#gaitFeatureList');
-        gaitList.empty();
-        
         var gaitFeatures = extractedFeatures.gait;
-        var gaitNames = FEATURE_NAMES.gait;
-        
-        var html = '<div class="feature-grid">';
-        for (var i = 0; i < gaitFeatures.length && i < gaitNames.length; i++) {
-            html += '<div class="feature-item">' +
-                '<span class="feature-number">' + (i + 1) + '</span>' +
-                '<span class="feature-name">' + gaitNames[i] + '</span>' +
-                '</div>';
-        }
-        html += '</div>';
-        gaitList.html(html);
-        
+        $('#gaitFeatureList').html(buildFeatureGridHtml(gaitFeatures, FEATURE_NAMES.gait));
         $('#gaitFeatureCount').text(gaitFeatures.length);
         $('#gaitFeatureDetails').show();
         hasAnyFeatures = true;
@@ -1792,7 +1716,6 @@ function renderFeatureDetails() {
         $('#gaitFeatureDetails').hide();
     }
 
-    // Show or hide the entire feature details section
     if (hasAnyFeatures) {
         $('#featureDetailsSection').show();
     } else {
@@ -1985,9 +1908,9 @@ function resetForm() {
     $('#extractGaitCheck').prop('checked', false);
 
     // Keep detect button enabled (clicking without data shows a message)
-    var tip = bootstrap.Tooltip.getInstance(document.getElementById('predictBtn'));
+    var tip = bootstrap.Tooltip.getInstance(document.getElementById('detectBtn'));
     if (tip) {
-        document.getElementById('predictBtn').setAttribute('data-bs-original-title', 'Run AI detection (load example or upload data first)');
+        document.getElementById('detectBtn').setAttribute('data-bs-original-title', 'Run AI detection (load example or upload data first)');
     }
 
     // Hide loading and dismiss results modal if open

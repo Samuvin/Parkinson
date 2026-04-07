@@ -69,7 +69,7 @@ class DataLoader:
                     f"Please manually download from:\n"
                     f"https://archive.ics.uci.edu/ml/machine-learning-databases/parkinsons/parkinsons.data\n"
                     f"and save to: {speech_file}\n\n"
-                    f"See DATASETS.md for detailed instructions."
+                    f"See README.md and config/multimodal_features.yaml for detailed instructions."
                 )
         
         # Load the data
@@ -215,7 +215,7 @@ class DataLoader:
                 f"Place a CSV with columns matching the project schema at:\n"
                 f"{self.handwriting_dir / 'handwriting_data.csv'}\n\n"
                 f"Expected format: CSV with features and 'status' column (1=PD, 0=healthy)\n"
-                f"See DATASETS.md for detailed instructions on obtaining this dataset."
+                f"See README.md and config/multimodal_features.yaml for detailed instructions on obtaining this dataset."
             )
         
         df = pd.read_csv(handwriting_file)
@@ -251,11 +251,11 @@ class DataLoader:
             raise FileNotFoundError(
                 f"Gait dataset not found at {self.gait_dir / 'gait_data.csv'}\n\n"
                 f"This system requires REAL gait data.\n"
-                f"See https://physionet.org/content/gaitpdb/1.0.0/ and DATASETS.md\n\n"
+                f"See https://physionet.org/content/gaitpdb/1.0.0/ and README.md / config/multimodal_features.yaml\n\n"
                 f"After ETL, place features at:\n"
                 f"{self.gait_dir / 'gait_data.csv'}\n\n"
                 f"Expected format: CSV with features and 'status' column (1=PD, 0=healthy)\n"
-                f"See DATASETS.md for detailed instructions."
+                f"See README.md and config/multimodal_features.yaml for detailed instructions."
             )
         
         df = pd.read_csv(gait_file)
@@ -394,7 +394,7 @@ class DataLoader:
                 'status': 'available'
             }
         except FileNotFoundError as e:
-            info['handwriting'] = {'status': 'missing', 'error': 'Dataset not found. See DATASETS.md'}
+            info['handwriting'] = {'status': 'missing', 'error': 'Dataset not found. See README.md and config/multimodal_features.yaml'}
         except Exception as e:
             info['handwriting'] = {'status': 'error', 'error': str(e)}
         
@@ -409,7 +409,7 @@ class DataLoader:
                 'status': 'available'
             }
         except FileNotFoundError as e:
-            info['gait'] = {'status': 'missing', 'error': 'Dataset not found. See DATASETS.md'}
+            info['gait'] = {'status': 'missing', 'error': 'Dataset not found. See README.md and config/multimodal_features.yaml'}
         except Exception as e:
             info['gait'] = {'status': 'error', 'error': str(e)}
         
@@ -434,12 +434,12 @@ def download_datasets() -> None:
             print(f"  Features: {stats['features']}")
             print(f"  PD cases: {stats['pd_cases']}, Healthy: {stats['healthy']}")
         elif stats.get('status') == 'missing':
-            print(f"  ✗ Missing - See DATASETS.md for download instructions")
+            print("  ✗ Missing - See README.md and config/multimodal_features.yaml for download instructions")
         else:
             print(f"  ✗ Error: {stats.get('error', 'Unknown error')}")
     
     print("\n" + "=" * 60)
-    print("For detailed dataset information, see: DATASETS.md")
+    print("For detailed dataset information, see README.md and config/multimodal_features.yaml")
     print("=" * 60 + "\n")
 
 

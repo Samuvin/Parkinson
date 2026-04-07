@@ -15,12 +15,12 @@ class Config:
         
         Args:
             config_path: Path to the configuration YAML file.
-                        If None, uses the default config.yaml in project root.
+                        If None, uses ``config/project.yaml`` under the project root.
         """
         if config_path is None:
             # Get project root (3 levels up from this file)
             project_root = Path(__file__).parent.parent.parent
-            config_path = project_root / "config.yaml"
+            config_path = project_root / "config" / "project.yaml"
         
         self.config_path = Path(config_path)
         self.config = self._load_config()

@@ -1,7 +1,1 @@
-"""Machine learning models for Parkinson's prediction."""
-
-from .logistic_regression import LogisticRegressionModel
-from .svm_model import SVMModel
-
-__all__ = ['LogisticRegressionModel', 'SVMModel']
-
+"""Sklearn LR/SVM training wrappers were removed; use ``train_dl.py`` (SE-ResNet1D + attention) and ``common/`` for features."""

@@ -6,7 +6,7 @@ data/raw/handwriting/download_handwriting_sources.sh). Each line:
 X;Y;Z;Pressure;GripAngle;Timestamp;Test ID (see uci_spiral/readme.txt).
 
 Output is for research / schema inspection; ``--approx-project-cols`` adds rough
-analogues of dl_models.dataset.HANDWRITING_FEATURE_NAMES (not identical to PaHaW mapping).
+analogues of dl_models.data.dataset.HANDWRITING_FEATURE_NAMES (not identical to PaHaW mapping).
 
 No user-controlled URLs; only local directory paths from argparse defaults.
 """
@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# Mirrors dl_models/dataset.py HANDWRITING_FEATURE_NAMES (avoid importing torch).
+# Mirrors dl_models/data/dataset.py HANDWRITING_FEATURE_NAMES (avoid importing torch).
 PROJECT_HW_NAMES = [
     "mean_pressure",
     "pressure_variation",

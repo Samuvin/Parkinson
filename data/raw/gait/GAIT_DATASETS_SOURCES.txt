@@ -2,7 +2,7 @@ Gait-related data under data/raw/gait/
 
 PhysioNet — Gait in Parkinson’s Disease Database (gaitpdb)
   https://physionet.org/content/gaitpdb/1.0.0/
-  Format: per-trial VGRF .txt time series (not one ready-made CSV for dl_models/dataset.py).
+  Format: per-trial VGRF .txt time series (not one ready-made CSV for dl_models/data/dataset.py).
   Project-shaped CSV: python scripts/build_handwriting_gait_from_public_sources.py
   (downloads trial files over fixed HTTPS URLs inside the script).
 

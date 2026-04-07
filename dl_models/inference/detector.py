@@ -1,10 +1,10 @@
 """
-Deep Learning inference for Parkinson's Disease prediction.
+Deep learning inference for Parkinson's disease detection.
 
-Provides ``DLPredictor`` -- a high-level class that loads the trained
-SE-ResNet multimodal model, runs a forward pass on new patient data,
-and returns prediction + explainability artefacts (attention weights,
-SE channel weights, Grad-CAM feature importance).
+Provides ``DLDetector`` — loads the trained SE-ResNet multimodal model, runs a
+forward pass on patient feature vectors, and returns a structured result
+(API fields still use ``prediction`` / ``prediction_label`` for client compatibility)
+plus explainability (attention, SE weights, scaled-input magnitude bars).
 """
 
 from __future__ import annotations
@@ -18,19 +18,40 @@ import joblib
 import numpy as np
 import torch
 
-from dl_models.dataset import (
+from dl_models.data.dataset import (
     GAIT_FEATURE_NAMES,
     HANDWRITING_FEATURE_NAMES,
     SPEECH_FEATURE_NAMES,
 )
-from dl_models.gradcam import GradCAM1D
-from dl_models.networks import MultimodalPDNet
+from dl_models.algorithm.networks import MultimodalPDNet
 
 logger = logging.getLogger(__name__)
 
 
-class DLPredictor:
-    """High-level deep learning predictor.
+def _feature_importance_from_scaled_inputs(
+    speech_t: torch.Tensor,
+    hw_t: torch.Tensor,
+    gait_t: torch.Tensor,
+) -> dict[str, list[float]]:
+    """Per-feature scores from |x| after scaling (UI bars; not gradient attribution)."""
+    out: dict[str, list[float]] = {}
+    for key, t in (
+        ("speech", speech_t),
+        ("handwriting", hw_t),
+        ("gait", gait_t),
+    ):
+        x = t.detach().squeeze(0).abs().cpu().numpy()
+        total = float(x.sum())
+        n = len(x)
+        if total <= 0.0:
+            out[key] = [1.0 / n] * n
+        else:
+            out[key] = (x / total).tolist()
+    return out
+
+
+class DLDetector:
+    """High-level deep learning detector.
 
     Loads the saved ``.pt`` model and scalers, runs inference,
     and returns structured results including explainability data.
@@ -57,8 +78,6 @@ class DLPredictor:
         self.model: Optional[MultimodalPDNet] = None
         self.scalers: Optional[dict] = None
         self.metrics: Optional[dict] = None
-        self.gradcam: Optional[GradCAM1D] = None
-
         self._model_file = model_file
         self._scalers_file = scalers_file
         self._metrics_file = metrics_file
@@ -114,18 +133,15 @@ class DLPredictor:
                 self.metrics = json.load(f)
             logger.info("Metrics loaded from %s", metrics_path)
 
-        # Initialise Grad-CAM
-        self.gradcam = GradCAM1D(self.model)
+    # -- detection --------------------------------------------------- #
 
-    # -- prediction --------------------------------------------------- #
-
-    def predict(
+    def detect(
         self,
         speech_features: Optional[np.ndarray] = None,
         handwriting_features: Optional[np.ndarray] = None,
         gait_features: Optional[np.ndarray] = None,
     ) -> dict[str, Any]:
-        """Run inference on a single patient sample.
+        """Run detection on a single patient sample.
 
         Missing modalities are zero-filled.
 
@@ -137,13 +153,13 @@ class DLPredictor:
         Returns:
             Dict with:
                 success: bool
-                prediction: 0 or 1
+                prediction: 0 or 1 (legacy API key)
                 prediction_label: 'healthy' or 'parkinsons'
                 confidence: float 0-1
                 probabilities: {healthy, parkinsons}
                 model_type: 'deep_learning'
                 attention_weights: {speech, handwriting, gait}
-                feature_importance: {speech: [...], handwriting: [...], gait: [...]}
+                feature_importance: {speech: [...], ...} (|scaled input|, sum=1 per modality)
                 se_weights: {speech: [...], handwriting: [...], gait: [...]}
                 feature_names: {speech: [...], ...}
                 modalities_used: [str, ...]
@@ -209,12 +225,9 @@ class DLPredictor:
             se_w = out[info_key]["se_weights_2"].squeeze(0).cpu().numpy()
             se_weights[name] = se_w.tolist()
 
-        # Grad-CAM feature importance
-        feature_importance = self.gradcam(speech_t, hw_t, gait_t)
-        # Convert to lists
-        feature_importance = {
-            k: v.tolist() for k, v in feature_importance.items()
-        }
+        feature_importance = _feature_importance_from_scaled_inputs(
+            speech_t, hw_t, gait_t,
+        )
 
         return {
             "success": True,

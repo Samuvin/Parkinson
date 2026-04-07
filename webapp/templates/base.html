@@ -48,10 +48,17 @@
                         </a>
                     </li> #}
                     <li class="nav-item">
-                        <a class="nav-link{% if request.endpoint == 'predict_page' %} active{% endif %}"
-                           href="{{ url_for('predict_page') }}"
-                           {% if request.endpoint == 'predict_page' %}aria-current="page"{% endif %}>
+                        <a class="nav-link{% if request.endpoint == 'detect_page' %} active{% endif %}"
+                           href="{{ url_for('detect_page') }}"
+                           {% if request.endpoint == 'detect_page' %}aria-current="page"{% endif %}>
                             <i class="fas fa-chart-line"></i> Detect
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link{% if request.endpoint == 'model_report' %} active{% endif %}"
+                           href="{{ url_for('model_report') }}"
+                           {% if request.endpoint == 'model_report' %}aria-current="page"{% endif %}>
+                            <i class="fas fa-clipboard-list"></i> Model scores
                         </a>
                     </li>
                     <!-- TODO: Re-enable About nav item when ready -->

@@ -1,0 +1,34 @@
+# Project + training config (webapp Config, train_dl.py).
+# Feature column lists and CSV filenames: config/multimodal_features.yaml
+
+data:
+  raw_dir: data/raw
+  random_state: 42
+  train_size: 0.70
+  val_size: 0.15
+  multimodal_features_config: config/multimodal_features.yaml
+
+deep_learning:
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  early_stopping_patience: 15
+  dropout: 0.3
+  embed_dim: 64
+  se_reduction: 4
+  noise_std: 0.05
+  feature_dropout: 0.1
+  use_smote: true
+  smote_k_neighbors: 5
+  seed: 42
+  grad_clip_norm: 1.0
+  label_smoothing: 0.0
+  use_amp: true
+  dataloader_num_workers: 0
+  # lr_scheduler: plateau | cosine | onecycle (cosine/onecycle work best with long runs)
+  lr_scheduler: plateau
+  onecycle_pct_start: 0.1
+  # early_stop_monitor: val_loss | val_roc_auc
+  early_stop_monitor: val_roc_auc
+  save_dir: models

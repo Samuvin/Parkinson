@@ -4,15 +4,17 @@ Train the Multimodal SE-ResNet1D model for Parkinson's Disease prediction.
 
 Usage::
 
-    python train_dl.py                     # uses defaults from config.yaml
+    python train_dl.py                     # uses defaults from config/project.yaml
     python train_dl.py --epochs 200        # override epochs
     python train_dl.py --device cuda       # force GPU
 
 The script will:
     1. Load speech, handwriting, and gait CSVs
-    2. Apply SMOTE for class balancing
-    3. Split into train / val / test (70 / 15 / 15)
-    4. Train SE-ResNet with augmentation, early stopping, LR scheduling
+    2. Optionally apply SMOTE (with a safe ``k_neighbors`` for small cohorts)
+    3. Split into train / val / test (70 / 15 / 15), stratified
+    4. Train with AdamW, optional AMP (CUDA), cosine / OneCycle / plateau LR,
+       class-weighted BCE when SMOTE is off, label smoothing, early stopping
+       on val loss or val ROC-AUC
     5. Save best model (.pt), metrics (.json), and plots to models/
 """
 
@@ -20,8 +22,9 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
+import random
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import yaml
@@ -31,12 +34,9 @@ from sklearn.preprocessing import StandardScaler
 
 import torch
 
-from dl_models.dataset import (
-    MultimodalPDDataset,
-    load_all_modalities,
-)
-from dl_models.networks import MultimodalPDNet
-from dl_models.trainer import Trainer
+from dl_models.algorithm import MultimodalPDNet
+from dl_models.data import MultimodalPDDataset, load_all_modalities
+from dl_models.training import Trainer
 
 # ------------------------------------------------------------------ #
 #  Logging                                                            #
@@ -54,7 +54,16 @@ logger = logging.getLogger("train_dl")
 #  Helpers                                                            #
 # ------------------------------------------------------------------ #
 
-def load_config(path: str = "config.yaml") -> dict:
+def set_seed(seed: int) -> None:
+    """Fix RNG seeds for reproducibility (best-effort across libraries)."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def load_config(path: str = "config/project.yaml") -> dict:
     """Load YAML configuration."""
     with open(path) as f:
         return yaml.safe_load(f)
@@ -72,12 +81,27 @@ def apply_smote(
 
     SMOTE requires a single feature matrix, so we concatenate all
     modalities, oversample, then split the columns back.
+
+    ``k_neighbors`` is capped by the minority class size so small datasets
+    do not crash (imbalanced-learn requires ``k <= n_minority - 1``).
     """
     n_speech = speech.shape[1]
     n_hw = handwriting.shape[1]
 
+    n_pos = int(labels.sum())
+    n_neg = int(len(labels) - n_pos)
+    minority = min(n_pos, n_neg)
+    k_eff = min(k_neighbors, minority - 1)
+    if k_eff < 1:
+        logger.warning(
+            "SMOTE skipped: minority class count %d is too small for k=%d.",
+            minority,
+            k_neighbors,
+        )
+        return speech, handwriting, gait, labels
+
     combined = np.hstack([speech, handwriting, gait])
-    sm = SMOTE(random_state=random_state, k_neighbors=k_neighbors)
+    sm = SMOTE(random_state=random_state, k_neighbors=k_eff)
     combined_res, labels_res = sm.fit_resample(combined, labels)
 
     speech_res = combined_res[:, :n_speech]
@@ -85,9 +109,12 @@ def apply_smote(
     gait_res = combined_res[:, n_speech + n_hw :]
 
     logger.info(
-        "SMOTE: %d -> %d samples (PD=%d, Healthy=%d)",
-        len(labels), len(labels_res),
-        int(labels_res.sum()), int((labels_res == 0).sum()),
+        "SMOTE: %d -> %d samples (PD=%d, Healthy=%d), k_neighbors=%d",
+        len(labels),
+        len(labels_res),
+        int(labels_res.sum()),
+        int((labels_res == 0).sum()),
+        k_eff,
     )
     return speech_res, hw_res, gait_res, labels_res
 
@@ -101,7 +128,7 @@ def main() -> None:
         description="Train Multimodal SE-ResNet1D for PD prediction",
     )
     parser.add_argument(
-        "--config", default="config.yaml", help="Path to config.yaml",
+        "--config", default="config/project.yaml", help="Path to project YAML (config/project.yaml)",
     )
     parser.add_argument(
         "--epochs", type=int, default=None,
@@ -142,6 +169,17 @@ def main() -> None:
     noise_std = dl_cfg.get("noise_std", 0.05)
     feature_dropout = dl_cfg.get("feature_dropout", 0.1)
     use_smote = (not args.no_smote) and dl_cfg.get("use_smote", True)
+    seed = int(dl_cfg.get("seed", data_cfg.get("random_state", 42)))
+    set_seed(seed)
+
+    grad_clip_norm = float(dl_cfg.get("grad_clip_norm", 1.0))
+    label_smoothing = float(dl_cfg.get("label_smoothing", 0.0))
+    use_amp = bool(dl_cfg.get("use_amp", True))
+    num_workers = int(dl_cfg.get("dataloader_num_workers", 0))
+    lr_scheduler = str(dl_cfg.get("lr_scheduler", "plateau"))
+    onecycle_pct_start = float(dl_cfg.get("onecycle_pct_start", 0.1))
+    early_stop_monitor = str(dl_cfg.get("early_stop_monitor", "val_loss"))
+    smote_k_neighbors = int(dl_cfg.get("smote_k_neighbors", 5))
 
     save_dir = Path(dl_cfg.get("save_dir", "models"))
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -173,8 +211,12 @@ def main() -> None:
     # ---- SMOTE ------------------------------------------------------ #
     if use_smote:
         speech, handwriting, gait, labels = apply_smote(
-            speech, handwriting, gait, labels,
+            speech,
+            handwriting,
+            gait,
+            labels,
             random_state=random_state,
+            k_neighbors=smote_k_neighbors,
         )
 
     # ---- train / val / test split ----------------------------------- #
@@ -219,6 +261,24 @@ def main() -> None:
     val_ds = MultimodalPDDataset(*val_data)
     test_ds = MultimodalPDDataset(*test_data)
 
+    train_labels = train_data[3]
+    if use_smote:
+        pos_weight: Optional[float] = None
+    else:
+        n_pos = float(np.sum(train_labels == 1))
+        n_neg = float(np.sum(train_labels == 0))
+        if n_pos < 1.0:
+            pos_weight = None
+            logger.warning("No positive labels in training fold; pos_weight disabled.")
+        else:
+            pos_weight = n_neg / n_pos
+            logger.info(
+                "Class-weighted BCE: pos_weight=%.4f (no SMOTE, n_pos=%d, n_neg=%d)",
+                pos_weight,
+                int(n_pos),
+                int(n_neg),
+            )
+
     # ---- save scalers for inference --------------------------------- #
     import joblib
     scaler_path = save_dir / "dl_scalers.joblib"
@@ -232,7 +292,7 @@ def main() -> None:
     )
     logger.info("Scalers saved to %s", scaler_path)
 
-    # ---- model ------------------------------------------------------ #
+    # MultimodalPDNet = 3× SE-ResNet1D encoder + AttentionFusion + DenseClassifier (dl_models.algorithm)
     model = MultimodalPDNet(
         speech_features=speech.shape[1],
         handwriting_features=handwriting.shape[1],
@@ -250,13 +310,28 @@ def main() -> None:
 
     # ---- train ------------------------------------------------------ #
     trainer = Trainer(
-        model, device=device, lr=lr, weight_decay=weight_decay,
-        patience=patience, noise_std=noise_std,
+        model,
+        device=device,
+        lr=lr,
+        weight_decay=weight_decay,
+        patience=patience,
+        noise_std=noise_std,
         feature_dropout=feature_dropout,
+        grad_clip_norm=grad_clip_norm,
+        label_smoothing=label_smoothing,
+        pos_weight=pos_weight,
+        use_amp=use_amp,
+        num_workers=num_workers,
+        lr_scheduler=lr_scheduler,
+        onecycle_pct_start=onecycle_pct_start,
+        early_stop_monitor=early_stop_monitor,
     )
 
     history = trainer.fit(
-        train_ds, val_ds, epochs=epochs, batch_size=batch_size,
+        train_ds,
+        val_ds,
+        epochs=epochs,
+        batch_size=batch_size,
     )
 
     # ---- evaluate --------------------------------------------------- #
@@ -285,9 +360,11 @@ def main() -> None:
         "device": device,
         "epochs_trained": history["total_epochs"],
         "best_val_loss": history["best_val_loss"],
+        "best_val_roc_auc": history["best_val_roc_auc"],
         "elapsed_seconds": history["elapsed_seconds"],
         "train_loss_history": [float(x) for x in history["train_losses"]],
         "val_loss_history": [float(x) for x in history["val_losses"]],
+        "val_roc_auc_history": [float(x) for x in history["val_roc_aucs"]],
         "test_accuracy": test_metrics["accuracy"],
         "test_precision": test_metrics["precision"],
         "test_recall": test_metrics["recall"],
@@ -305,6 +382,15 @@ def main() -> None:
             "noise_std": noise_std,
             "feature_dropout": feature_dropout,
             "use_smote": use_smote,
+            "seed": seed,
+            "grad_clip_norm": grad_clip_norm,
+            "label_smoothing": label_smoothing,
+            "use_amp": use_amp,
+            "dataloader_num_workers": num_workers,
+            "lr_scheduler": lr_scheduler,
+            "onecycle_pct_start": onecycle_pct_start,
+            "early_stop_monitor": early_stop_monitor,
+            "smote_k_neighbors": smote_k_neighbors,
             "multimodal_features_config": mm_spec,
         },
     }

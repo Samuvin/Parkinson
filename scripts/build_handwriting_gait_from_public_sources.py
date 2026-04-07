@@ -8,8 +8,8 @@ Each row is one handwriting task; ``label`` is preserved as ``status``.
 Gait: one row per walking trial from PhysioNet gaitpdb (Ga*.txt VGRF records).
 https://physionet.org/content/gaitpdb/1.0.0/ — Controls: GaCo*, PD: GaPt*.
 
-Output columns match dl_models/dataset.py. Row alignment with speech is still
-index-based (see DATASETS.md); this script trims to ``--n-rows`` for parity
+Output columns match dl_models/data/dataset.py. Row alignment with speech is still
+index-based (see README.md and config/multimodal_features.yaml); this script trims to ``--n-rows`` for parity
 with the speech CSV row count.
 
 No user-controlled URLs are passed to file APIs (fixed base URLs only).

@@ -1,0 +1,3 @@
+# Deep learning training (train_dl.py) and DLDetector in the webapp
+torch>=2.0.0
+imbalanced-learn>=0.11.0

@@ -29,7 +29,7 @@
     </div>
 
     <div class="fade-in-up fade-in-up-d1">
-        <div class="card main-predict-card" style="overflow:visible;margin:0 auto">
+        <div class="card main-detect-card" style="overflow:visible;margin:0 auto">
             <div class="card-header bg-primary">
                 <h5 class="mb-0"><i class="fas fa-sliders-h" style="color:var(--accent);margin-right:6px"></i> Input Data</h5>
             </div>
@@ -558,7 +558,7 @@
                     <!-- Action Buttons -->
                     <div class="divider pt-3 mt-3">
                         <div class="d-grid gap-2">
-                            <button type="button" class="btn btn-accent btn-lg" id="predictBtn"
+                            <button type="button" class="btn btn-accent btn-lg" id="detectBtn"
                                     data-bs-toggle="tooltip" data-bs-placement="top"
                                     title="Run AI detection (load example or upload data first)">
                                 <i class="fas fa-play-circle"></i> Make Detection
@@ -654,9 +654,9 @@
         </div>
     </div>
 
-    <!-- Full-screen loading overlay (visible for 10–15s while predicting) -->
-    <div id="loadingSection" style="display:none" class="predict-loader-overlay">
-        <div class="predict-loader-box">
+    <!-- Full-screen loading overlay (visible while running detection) -->
+    <div id="loadingSection" style="display:none" class="detect-loader-overlay">
+        <div class="detect-loader-box">
             <div class="loader-dots mb-3">
                 <span class="dot"></span><span class="dot"></span><span class="dot"></span>
             </div>
@@ -926,7 +926,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- jQuery only on predict page -->
+<!-- jQuery only on detect page -->
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-<script src="{{ url_for('static', filename='js/predict.js') }}?v=17.1"></script>
+<script src="{{ url_for('static', filename='js/detect.js') }}?v=18"></script>
 {% endblock %}

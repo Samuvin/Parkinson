@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
 """
-Voice (tabular) training pipeline: optional CSV refresh, train LR+SVM, export reports.
+Optional speech CSV download (fixed HTTPS URLs only).
 
-Uses fixed HTTPS URLs only (same sources as data/raw/speech/download_speech_csvs.sh).
+Multimodal training uses ``train_dl.py`` (1D CNN / SE-ResNet encoders + attention fusion + dense head),
+not tabular LR/SVM.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import ssl
 import sys
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
-
-import numpy as np
+from typing import List, Tuple
 
 # Fixed URL → filename under data/raw/speech/ (not user-controlled).
 SPEECH_DOWNLOADS: List[Tuple[str, str]] = [
@@ -42,20 +40,6 @@ SPEECH_DOWNLOADS: List[Tuple[str, str]] = [
 ]
 
 
-def _json_safe(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(k): _json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_safe(v) for v in value]
-    if isinstance(value, (np.floating, np.float32, np.float64)):
-        return float(value)
-    if isinstance(value, (np.integer, np.int32, np.int64)):
-        return int(value)
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    return value
-
-
 def download_speech_csvs(speech_dir: Path) -> None:
     """Download speech-related CSVs into ``speech_dir`` using verified TLS."""
     import certifi
@@ -72,7 +56,9 @@ def download_speech_csvs(speech_dir: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Train tabular voice models and export reports.")
+    parser = argparse.ArgumentParser(
+        description="Download speech CSVs (optional). Train with train_dl.py, not LR/SVM."
+    )
     parser.add_argument(
         "--download-speech",
         action="store_true",
@@ -83,41 +69,13 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
 
-    if args.download_speech:
-        download_speech_csvs(root / "data" / "raw" / "speech")
+    if not args.download_speech:
+        print("This script only downloads speech CSVs when you pass --download-speech.")
+        print("Train the multimodal deep model with:  python train_dl.py")
+        return 0
 
-    from src.utils.config import ensure_dir_exists, get_reports_dir
-    from train import run_voice_training
-
-    ensure_dir_exists(get_reports_dir())
-    result = run_voice_training(save_preprocessed=True)
-
-    lr_coef = np.asarray(result.lr_model.model.coef_).ravel()
-    metrics_path = get_reports_dir() / "voice_metrics.json"
-    payload: Dict[str, Any] = {
-        "feature_names": result.feature_names,
-        "best_model_name": result.best_model_name,
-        "logistic_regression": _json_safe(result.lr_metrics),
-        "svm": _json_safe(result.svm_metrics),
-        "logistic_regression_coefficients": [
-            [name, float(c)] for name, c in zip(result.feature_names, lr_coef)
-        ],
-    }
-    metrics_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    print(f"Wrote {metrics_path}")
-
-    npz_path = get_reports_dir() / "voice_test_predictions.npz"
-    np.savez_compressed(
-        npz_path,
-        X_test=result.X_test,
-        y_test=result.y_test,
-        y_pred_lr=result.y_pred_lr,
-        y_proba_lr=result.y_proba_lr,
-        y_pred_svm=result.y_pred_svm,
-        y_proba_svm=result.y_proba_svm,
-        lr_coef=lr_coef,
-    )
-    print(f"Wrote {npz_path}")
+    download_speech_csvs(root / "data" / "raw" / "speech")
+    print("Done. Next: python train_dl.py")
     return 0
 
 

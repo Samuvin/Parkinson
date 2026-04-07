@@ -20,7 +20,7 @@ from torch.utils.data import Dataset
 
 logger = logging.getLogger(__name__)
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_SPEC_PATH = _REPO_ROOT / "config" / "multimodal_features.yaml"
 
 

@@ -34,11 +34,9 @@ venv.bak/
 # Jupyter Notebook
 .ipynb_checkpoints
 notebooks/*-executed.ipynb
-# Downloaded notebook demo media (see notebooks/sample/README.md)
+# Downloaded notebook demo media (see notebooks/README.md)
 notebooks/sample/**
-!notebooks/sample/README.md
 notebooks/samples/**
-!notebooks/samples/README.md
 */.ipynb_checkpoints/*
 
 # IDEs

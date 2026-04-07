@@ -1,15 +1,11 @@
 """JWT authentication middleware for protecting Flask routes."""
 
 import os
-import logging
-from functools import wraps
 
 import jwt
 from flask import request, jsonify, g
 
 from webapp.models.user import find_user_by_id
-
-logger = logging.getLogger(__name__)
 
 
 def _get_jwt_secret():
@@ -54,43 +50,6 @@ def _decode_token():
         raise ValueError(f"Invalid token: {exc}")
 
 
-def token_required(func):
-    """
-    Decorator that enforces JWT authentication on a route.
-
-    On success the authenticated user document is stored in
-    ``flask.g.current_user``.
-
-    Usage::
-
-        @app.route("/protected")
-        @token_required
-        def protected_route():
-            user = g.current_user
-            ...
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            payload = _decode_token()
-        except ValueError as exc:
-            return jsonify({"success": False, "error": str(exc)}), 401
-
-        user_id = payload.get("sub")
-        if not user_id:
-            return jsonify({"success": False, "error": "Invalid token payload"}), 401
-
-        user = find_user_by_id(user_id)
-        if user is None:
-            return jsonify({"success": False, "error": "User not found"}), 401
-
-        g.current_user = user
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
 def enforce_auth():
     """
     A ``before_request`` handler that protects **API** routes while
@@ -103,12 +62,13 @@ def enforce_auth():
     Public (no token required):
         - All non-API routes (template pages, static files, favicon, etc.)
         - GET  /api/health
+        - GET  /api/training_report
         - POST /api/auth/register
         - POST /api/auth/login
         - POST /api/auth/logout
 
     Protected (valid JWT required):
-        - All other ``/api/*`` endpoints (predict, upload, model_info,
+        - All other ``/api/*`` endpoints (detect, upload, model_info,
           process_combined_video, auth/me, etc.)
     """
     # Allow static file requests through.
@@ -116,17 +76,18 @@ def enforce_auth():
         return None
 
     # Only enforce JWT on API routes.  Template pages served by the
-    # browser (/, /predict_page, /about, etc.) are not API calls and
+    # browser (/, /detect, /about, etc.) are not API calls and
     # cannot carry an Authorization header.
     if not request.path.startswith("/api/"):
         return None
 
     # Public API endpoints that don't require a token.
     public_api_endpoints = {
-        "predict.health_check",   # GET  /api/health
-        "auth.register",          # POST /api/auth/register
-        "auth.login",             # POST /api/auth/login
-        "auth.logout",            # POST /api/auth/logout
+        "detect.health_check",              # GET  /api/health
+        "training_report.get_training_report",  # GET  /api/training_report
+        "auth.register",                    # POST /api/auth/register
+        "auth.login",                       # POST /api/auth/login
+        "auth.logout",                      # POST /api/auth/logout
     }
 
     endpoint = request.endpoint

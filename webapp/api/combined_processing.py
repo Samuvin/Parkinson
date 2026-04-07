@@ -269,8 +269,7 @@ def _extract_audio_from_video(video_path: str) -> str:
 def _process_demo_combined(filename, extract_voice, extract_handwriting, extract_gait):
     """Process demo/dummy files with mock feature generation.
     
-    This mimics the light mode behavior for when no real files are uploaded
-    but the system is running in full mode.
+    Used when the client sends a demo placeholder file (e.g. tiny payload or demo_ prefix).
     """
     try:
         # Simulate feature extraction with dummy data (consistent with filename-based logic)
