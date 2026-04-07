@@ -72,3 +72,4 @@ python wsgi.py             # http://0.0.0.0:8000 by default (PORT env overrides)
 | [`src/`](src/) | Config, optional sklearn joblib loaders, utilities |
 | [`models/`](models/) | Saved checkpoints (`.pt`, optional `.joblib`) |
 | [`data/raw/`](data/raw/) | Training CSVs |
+| [`scripts/README.md`](scripts/README.md) | What each script does when you run it |
