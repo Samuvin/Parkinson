@@ -1,0 +1,6 @@
+# Optional: Jupyter for staff demos under notebooks/
+jupyter>=1.0.0
+ipykernel>=6.0.0
+matplotlib>=3.7.0
+# Multimodal notebook cells (MultimodalPDNet, Grad-CAM); same stack as train_dl.py
+torch>=2.0.0

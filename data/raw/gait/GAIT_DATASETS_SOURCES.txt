@@ -1,0 +1,15 @@
+Gait-related data under data/raw/gait/
+
+PhysioNet — Gait in Parkinson’s Disease Database (gaitpdb)
+  https://physionet.org/content/gaitpdb/1.0.0/
+  Format: per-trial VGRF .txt time series (not one ready-made CSV for dl_models/dataset.py).
+  Project-shaped CSV: python scripts/build_handwriting_gait_from_public_sources.py
+  (downloads trial files over fixed HTTPS URLs inside the script).
+
+Kaggle — Gait in Parkinson’s Disease (tabular mirror; schema varies by upload)
+  https://www.kaggle.com/datasets/zarif98sjs/gait-in-parkinsons-disease
+  CLI: kaggle datasets download -d zarif98sjs/gait-in-parkinsons-disease -p data/raw/gait/kaggle_mirror --unzip
+  Or: DOWNLOAD_KAGGLE_GAIT=1 bash download_gait_sources.sh
+
+Kaggle competition — wearable freezing-of-gait (time series; not drop-in for ten summary gait columns)
+  https://www.kaggle.com/competitions/tlvmc-parkinsons-freezing-of-gait-prediction

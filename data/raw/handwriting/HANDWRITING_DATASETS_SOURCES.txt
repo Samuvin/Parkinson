@@ -1,0 +1,23 @@
+Handwriting-related data under data/raw/handwriting/
+
+UCI 395 — Parkinson Disease Spiral Drawings Using Digitized Graphics Tablet
+  Landing: https://archive.ics.uci.edu/ml/datasets/Parkinson+Disease+Spiral+Drawings+Using+Digitized+Graphics+Tablet
+  Dataset page: https://archive.ics.uci.edu/dataset/395/parkinson+disease+spiral+drawings+using+digitized+graphics+tablet
+  Zip (pinned): https://archive.ics.uci.edu/static/public/395/parkinson+disease+spiral+drawings+using+digitized+graphics+tablet.zip
+  License: CC BY 4.0 (UCI)
+  Local layout after download_handwriting_sources.sh: uci_spiral/hw_dataset/, uci_spiral/new_dataset/, readme.txt
+  Trace format (semicolon-separated): X;Y;Z;Pressure;GripAngle;Timestamp;Test ID
+
+Kaggle — Parkinson disease spiral drawings (images)
+  https://www.kaggle.com/datasets/team-ai/parkinson-disease-spiral-drawings
+  CLI: kaggle datasets download -d team-ai/parkinson-disease-spiral-drawings -p data/raw/handwriting/kaggle_spiral --unzip
+  Or: DOWNLOAD_KAGGLE_HANDWRITING=1 bash download_handwriting_sources.sh
+
+PaHaW-derived task CSVs (→ handwriting_data.csv contract)
+  Built by: python scripts/build_handwriting_gait_from_public_sources.py
+  Source mirror: https://github.com/musaru/PD_PaHaW
+
+Tabular summary from UCI traces
+  python scripts/uci_spiral_traces_to_csv.py [--approx-project-cols]
+
+Re-fetch UCI: bash data/raw/handwriting/download_handwriting_sources.sh

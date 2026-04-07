@@ -1,128 +1,23 @@
-# Parkinson's Disease Prediction System Configuration
+# Multimodal PD deep learning training
 
-# Data Configuration
 data:
-  raw_dir: "data/raw"
-  processed_dir: "data/processed"
+  raw_dir: data/raw
+  random_state: 42
   train_size: 0.70
   val_size: 0.15
-  test_size: 0.15
-  random_state: 42
+  # CSV column lists and paths (relative to raw_dir): see config/multimodal_features.yaml
+  multimodal_features_config: config/multimodal_features.yaml
 
-# Feature Engineering
-features:
-  speech:
-    sample_rate: 16000
-    n_mfcc: 13
-    n_fft: 2048
-    hop_length: 512
-    num_features: 22
-
-# Model Configuration
-models:
-  logistic_regression:
-    C: [0.001, 0.01, 0.1, 1, 10, 100]
-    penalty: ['l1', 'l2']
-    solver: ['liblinear', 'saga']
-    max_iter: 1000
-    class_weight: 'balanced'
-  
-  svm:
-    kernel: ['linear', 'rbf']  # Reduced to prevent overfitting
-    C: [0.1, 0.5, 1, 5]  # Lower C values for better generalization
-    gamma: ['scale', 'auto']  # Simpler gamma options
-    degree: [2, 3]  # for polynomial kernel
-    class_weight: 'balanced'
-    probability: true
-  
-  random_forest:
-    n_estimators: [100, 200, 300, 500]
-    max_depth: [10, 20, 30, None]
-    min_samples_split: [2, 5, 10]
-    min_samples_leaf: [1, 2, 4]
-    max_features: ['sqrt', 'log2']
-    class_weight: 'balanced'
-    oob_score: true
-  
-  gradient_boosting:
-    xgboost:
-      learning_rate: [0.01, 0.05, 0.1, 0.2]
-      n_estimators: [100, 200, 300, 500]
-      max_depth: [3, 5, 7, 9]
-      subsample: [0.7, 0.8, 0.9, 1.0]
-      colsample_bytree: [0.7, 0.8, 0.9, 1.0]
-      min_child_weight: [1, 3, 5]
-      gamma: [0, 0.1, 0.2]
-    lightgbm:
-      learning_rate: [0.01, 0.05, 0.1, 0.2]
-      n_estimators: [100, 200, 300, 500]
-      max_depth: [3, 5, 7, 9]
-      num_leaves: [31, 63, 127]
-      subsample: [0.7, 0.8, 0.9, 1.0]
-      colsample_bytree: [0.7, 0.8, 0.9, 1.0]
-      min_child_samples: [10, 20, 30]
-  
-  ensemble:
-    voting_strategy: 'soft'  # soft or hard
-    stacking_meta_learner: 'logistic_regression'  # logistic_regression, random_forest, xgboost
-    weights: 'cv_based'  # equal or cv_based
-
-# Training Configuration
-training:
-  cv_folds: 5
-  scoring: 'roc_auc'
-  n_jobs: -1
-  verbose: 1
+deep_learning:
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  early_stopping_patience: 15
+  dropout: 0.3
+  embed_dim: 64
+  se_reduction: 4
+  noise_std: 0.05
+  feature_dropout: 0.1
   use_smote: true
-  smote_sampling_strategy: 'auto'
-
-# Augmentation Configuration
-augmentation:
-  enabled: false  # Set to true when augmentation module is available
-  noise_level: 0.05  # Gaussian noise std as fraction of feature std
-  smote_k_neighbors: 5
-  adasyn_n_neighbors: 5
-  augmentation_factor: 1.5  # Multiply training samples by this factor
-  mixup_alpha: 0.2  # Mixup interpolation parameter
-  apply_to_modalities:
-    speech: true
-    handwriting: true
-    gait: true
-
-# Validation Configuration
-validation:
-  use_nested_cv: true
-  n_outer_folds: 5
-  n_inner_folds: 5
-  n_repeats: 3
-  bootstrap_samples: 1000
-  confidence_interval: 0.95
-  calculate_stability_metrics: true
-
-# Evaluation Metrics
-evaluation:
-  metrics:
-    - accuracy
-    - precision
-    - recall
-    - f1
-    - roc_auc
-  plot_confusion_matrix: true
-  plot_roc_curve: true
-  plot_feature_importance: true
-
-# Web Application
-webapp:
-  host: '0.0.0.0'
-  port: 5000
-  debug: false
-  model_path: 'models/best_model.joblib'
-  max_upload_size: 16777216  # 16MB
-  allowed_extensions: ['csv', 'txt']
-
-# Model Persistence
-model_persistence:
-  save_dir: 'models'
-  save_best_only: true
-  save_all_kernels: false
-
+  save_dir: models

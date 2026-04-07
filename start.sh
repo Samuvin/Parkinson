@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Parkinson's Disease Prediction System - Start Script (Light mode only)
-# Uses custom logic only; no ML libraries (NumPy, sklearn, PyTorch, OpenCV, etc.)
+# Parkinson's Disease Prediction System - Start Script (Full mode)
+# Uses all ML libraries (NumPy, sklearn, PyTorch, OpenCV, Librosa, etc.)
 
 echo "============================================================"
 echo "Parkinson's Disease Prediction System"
-echo "Automated Setup & Start (Light mode)"
+echo "Automated Setup & Start (Full mode)"
 echo "============================================================"
 echo ""
 
@@ -43,10 +43,10 @@ source venv/bin/activate
 print_success "Virtual environment activated"
 echo ""
 
-# Step 3: Install light dependencies only
-print_info "Installing dependencies (light mode)..."
+# Step 3: Install full dependencies
+print_info "Installing dependencies (full mode - this may take a while)..."
 pip install --upgrade pip -q
-pip install -r requirements-light.txt -q
+pip install -r requirements.txt -q
 
 if [ $? -eq 0 ]; then
     print_success "Dependencies installed"
@@ -61,16 +61,16 @@ print_info "Checking for running server..."
 pkill -f "waitress-serve.*wsgi:app" 2>/dev/null
 pkill -f "wsgi:app" 2>/dev/null
 pkill -f "wsgi.py" 2>/dev/null
-sleep 1
+sleep 2
 echo ""
 
-# Step 5: Start the server (light mode)
-export USE_LIGHT_MODE=1
-print_success "Starting server (light mode - custom logic only)..."
+# Step 5: Start the server (full mode)
+export USE_LIGHT_MODE=0
+print_success "Starting server (full mode - all ML libraries enabled)..."
 echo ""
 echo "============================================================"
 echo "  URL: http://localhost:8000"
-echo "  Mode: Light (custom logic; no ML libraries)"
+echo "  Mode: Full (with ML libraries and file processing)"
 echo "============================================================"
 echo ""
 print_info "Press Ctrl+C to stop the server"

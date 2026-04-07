@@ -1,45 +1,96 @@
 """
 PyTorch Dataset for multimodal Parkinson's Disease tabular data.
 
-Loads speech (22 features), handwriting (10 features), and gait
-(10 features) CSVs, aligns them by index, and returns tensors
-suitable for ``MultimodalPDNet``.
+Feature column names and CSV paths are defined in ``config/multimodal_features.yaml``
+(override with ``load_all_modalities(..., feature_spec_path=...)``).
 """
 
 from __future__ import annotations
 
+import copy
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import torch
+import yaml
 from torch.utils.data import Dataset
 
 logger = logging.getLogger(__name__)
 
-# Feature columns per modality (excludes id / label columns).
-SPEECH_FEATURE_NAMES: list[str] = [
-    "MDVP:Fo(Hz)", "MDVP:Fhi(Hz)", "MDVP:Flo(Hz)",
-    "MDVP:Jitter(%)", "MDVP:Jitter(Abs)", "MDVP:RAP", "MDVP:PPQ",
-    "Jitter:DDP", "MDVP:Shimmer", "MDVP:Shimmer(dB)",
-    "Shimmer:APQ3", "Shimmer:APQ5", "MDVP:APQ", "Shimmer:DDA",
-    "NHR", "HNR", "RPDE", "DFA", "spread1", "spread2", "D2", "PPE",
-]
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_DEFAULT_SPEC_PATH = _REPO_ROOT / "config" / "multimodal_features.yaml"
 
-HANDWRITING_FEATURE_NAMES: list[str] = [
-    "mean_pressure", "pressure_variation", "mean_velocity",
-    "velocity_variation", "mean_acceleration", "penup_time_ratio",
-    "mean_stroke_length", "writing_tempo", "tremor_power",
-    "fluency_score",
-]
 
-GAIT_FEATURE_NAMES: list[str] = [
-    "stride_interval", "stride_variability", "swing_time",
-    "stance_time", "double_support_time", "gait_speed",
-    "cadence", "step_length", "stride_regularity",
-    "gait_asymmetry",
-]
+def _embedded_default_spec() -> dict[str, Any]:
+    return {
+        "label_column": "status",
+        "csv_paths": {
+            "speech": "speech/parkinsons.csv",
+            "handwriting": "handwriting/handwriting_data.csv",
+            "gait": "gait/gait_data.csv",
+        },
+        "speech_features": [
+            "MDVP:Fo(Hz)", "MDVP:Fhi(Hz)", "MDVP:Flo(Hz)",
+            "MDVP:Jitter(%)", "MDVP:Jitter(Abs)", "MDVP:RAP", "MDVP:PPQ",
+            "Jitter:DDP", "MDVP:Shimmer", "MDVP:Shimmer(dB)",
+            "Shimmer:APQ3", "Shimmer:APQ5", "MDVP:APQ", "Shimmer:DDA",
+            "NHR", "HNR", "RPDE", "DFA", "spread1", "spread2", "D2", "PPE",
+        ],
+        "handwriting_features": [
+            "mean_pressure", "pressure_variation", "mean_velocity",
+            "velocity_variation", "mean_acceleration", "penup_time_ratio",
+            "mean_stroke_length", "writing_tempo", "tremor_power",
+            "fluency_score",
+        ],
+        "gait_features": [
+            "stride_interval", "stride_variability", "swing_time",
+            "stance_time", "double_support_time", "gait_speed",
+            "cadence", "step_length", "stride_regularity",
+            "gait_asymmetry",
+        ],
+    }
+
+
+def load_multimodal_feature_spec(
+    feature_spec_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Load YAML spec for CSV paths and feature column lists.
+
+    If *feature_spec_path* is omitted or the file is missing, uses embedded
+    defaults (same lists as the repository YAML).
+    """
+    if feature_spec_path is not None:
+        p = Path(feature_spec_path)
+        if not p.is_file():
+            raise FileNotFoundError(f"Multimodal feature spec not found: {p.resolve()}")
+        with open(p) as f:
+            spec = yaml.safe_load(f)
+    else:
+        if _DEFAULT_SPEC_PATH.is_file():
+            with open(_DEFAULT_SPEC_PATH) as f:
+                spec = yaml.safe_load(f)
+        else:
+            spec = _embedded_default_spec()
+    if not isinstance(spec, dict):
+        raise ValueError("multimodal feature spec must be a YAML mapping")
+    out = copy.deepcopy(spec)
+    for key in ("speech_features", "handwriting_features", "gait_features", "csv_paths", "label_column"):
+        if key not in out:
+            raise ValueError(f"multimodal feature spec missing required key: {key!r}")
+    for m in ("speech", "handwriting", "gait"):
+        if m not in out["csv_paths"]:
+            raise ValueError(f"csv_paths missing {m!r}")
+    return out
+
+
+# Module-level names for imports (from default spec path or embedded fallback).
+_SPEC0 = load_multimodal_feature_spec(None)
+SPEECH_FEATURE_NAMES: list[str] = list(_SPEC0["speech_features"])
+HANDWRITING_FEATURE_NAMES: list[str] = list(_SPEC0["handwriting_features"])
+GAIT_FEATURE_NAMES: list[str] = list(_SPEC0["gait_features"])
 
 
 class MultimodalPDDataset(Dataset):
@@ -47,12 +98,6 @@ class MultimodalPDDataset(Dataset):
 
     Each sample contains speech, handwriting, and gait feature
     vectors plus a binary label (0 = healthy, 1 = PD).
-
-    Args:
-        speech_features: [N, 22] numpy array.
-        handwriting_features: [N, 10] numpy array.
-        gait_features: [N, 10] numpy array.
-        labels: [N] numpy array of 0/1.
     """
 
     def __init__(
@@ -88,17 +133,7 @@ def load_modality_csv(
     feature_columns: list[str],
     label_column: str = "status",
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Load a single modality CSV and return (features, labels).
-
-    Args:
-        path: Path to the CSV file.
-        feature_columns: Ordered list of feature column names.
-        label_column: Name of the binary label column.
-
-    Returns:
-        features: [N, num_features] float64 array.
-        labels: [N] int array.
-    """
+    """Load a single modality CSV and return (features, labels)."""
     df = pd.read_csv(path)
     features = df[feature_columns].values.astype(np.float64)
     labels = df[label_column].values.astype(np.int64)
@@ -112,40 +147,34 @@ def load_modality_csv(
 
 def load_all_modalities(
     data_dir: str | Path,
+    feature_spec_path: str | Path | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Load speech, handwriting, and gait CSVs from *data_dir*.
+    """Load speech, handwriting, and gait CSVs using the multimodal feature spec.
 
-    Expects the following paths under *data_dir*::
-
-        speech/parkinsons.csv
-        handwriting/handwriting_data.csv
-        gait/gait_data.csv
-
-    Samples are aligned by row index.  If modality sizes differ the
-    minimum length is used (extra rows are truncated).
-
-    Returns:
-        speech_features: [N, 22]
-        handwriting_features: [N, 10]
-        gait_features: [N, 10]
-        labels: [N]  (from speech CSV)
+    Paths in the spec are joined with *data_dir*. Row alignment follows the
+    minimum length across modalities; labels come from the speech CSV.
     """
+    spec = load_multimodal_feature_spec(feature_spec_path)
     data_dir = Path(data_dir)
+    lc = str(spec["label_column"])
+    cp = spec["csv_paths"]
 
     speech_feats, speech_labels = load_modality_csv(
-        data_dir / "speech" / "parkinsons.csv",
-        SPEECH_FEATURE_NAMES,
+        data_dir / cp["speech"],
+        list(spec["speech_features"]),
+        label_column=lc,
     )
     hw_feats, _ = load_modality_csv(
-        data_dir / "handwriting" / "handwriting_data.csv",
-        HANDWRITING_FEATURE_NAMES,
+        data_dir / cp["handwriting"],
+        list(spec["handwriting_features"]),
+        label_column=lc,
     )
     gait_feats, _ = load_modality_csv(
-        data_dir / "gait" / "gait_data.csv",
-        GAIT_FEATURE_NAMES,
+        data_dir / cp["gait"],
+        list(spec["gait_features"]),
+        label_column=lc,
     )
 
-    # Align by truncating to the smallest dataset
     n = min(len(speech_feats), len(hw_feats), len(gait_feats))
     if n < len(speech_feats):
         logger.warning(

@@ -1,0 +1,30 @@
+Speech-related CSVs live in this folder: data/raw/speech/
+
+Canonical files for this repo
+-------------------------------
+parkinsons.csv
+  Primary training speech file for train_dl.py (22 Little et al. features + status).
+  Source: https://raw.githubusercontent.com/SagarBapodara/Parkison-Disease-Detection-using-Machine-Learning/main/Data/parkinsons.csv
+  UCI: https://archive.ics.uci.edu/dataset/174/parkinsons
+  License: CC BY 4.0 (UCI)
+
+parkinsons_telemonitoring.csv
+  UCI telemonitoring (voice + motor_UPDRS / total_UPDRS). Used by src.data.data_loader, not train_dl by default.
+  Source: https://archive.ics.uci.edu/ml/machine-learning-databases/parkinsons/telemonitoring/parkinsons_updrs.data
+  License: CC BY 4.0 (UCI)
+
+Extra tabular sets (research / different schemas — not drop-in for train_dl)
+------------------------------------------------------------------------------
+voice_uci489_replicated_acoustic.csv
+  UCI 489 — replicated acoustic features (non-independent rows per subject).
+  https://archive.ics.uci.edu/ml/machine-learning-databases/00489/ReplicatedAcousticFeatures-ParkinsonDatabase.csv
+
+voice_uci301_multiple_sound_train.csv
+  UCI 301 training table (mirror). https://archive.ics.uci.edu/dataset/301/parkinson+speech+dataset+with+multiple+types+of+sound+recordings
+  Mirror: https://raw.githubusercontent.com/adachille/parkinsons-detector/master/data/multiple-sound-recording/train_data.csv
+
+voice_uci470_pd_classification_features.csv
+  UCI 470 high-dimensional speech features. Two header rows (group line + column names).
+  Mirror: https://raw.githubusercontent.com/adachille/parkinsons-detector/master/data/disease-classification/pd_speech_features.csv
+
+Re-fetch: bash download_speech_csvs.sh

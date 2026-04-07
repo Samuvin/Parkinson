@@ -182,6 +182,16 @@ def get_models_dir() -> Path:
     return get_project_root() / "models"
 
 
+def get_reports_dir() -> Path:
+    """
+    Get the reports directory path for training artifacts (metrics, predictions export).
+
+    Returns:
+        Path object pointing to the reports directory
+    """
+    return get_project_root() / "reports"
+
+
 def ensure_dir_exists(directory: Path) -> None:
     """
     Ensure a directory exists, create it if it doesn't.

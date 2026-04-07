@@ -21,7 +21,7 @@ app = create_app()
 if __name__ == "__main__":
     import waitress
 
-    port = int(os.environ.get("PORT", 8001))
+    port = int(os.environ.get("PORT", 8000))
     print(f"Starting Waitress server at http://0.0.0.0:{port}")
     print("Press Ctrl+C to stop.")
     waitress.serve(app, host="0.0.0.0", port=port, threads=4)

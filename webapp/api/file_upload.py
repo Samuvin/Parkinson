@@ -16,9 +16,9 @@ from werkzeug.utils import secure_filename
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from utils.audio_processing import extract_speech_features, features_dict_to_array as audio_to_array
-from utils.image_processing import extract_handwriting_features, features_dict_to_array as image_to_array
-from utils.video_processing import extract_gait_features, features_dict_to_array as video_to_array
+from common.audio_processing import extract_speech_features, features_dict_to_array as audio_to_array
+from common.image_processing import extract_handwriting_features, features_dict_to_array as image_to_array
+from common.video_processing import extract_gait_features, features_dict_to_array as video_to_array
 
 logger = logging.getLogger(__name__)
 

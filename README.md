@@ -1,38 +1,33 @@
 # Parkinson's Disease Early Prediction System
 
-A multimodal deep learning system for early prediction of Parkinson's Disease using **SE-ResNet with Attention Fusion** across speech, handwriting, and gait modalities.
+A Parkinson's Disease prediction system with a **voice-first** training path (tabular speech / UCI-style features) and an optional **multimodal** deep-learning path (speech + handwriting + gait).
 
 ## Project Overview
 
-Parkinson's Disease is the second most common neurodegenerative disorder, causing tremors, stiffness, and slow movement. Early prediction is crucial for improving patient outcomes. This project uses a deep learning framework that analyzes **three data modalities** with explainable AI (Grad-CAM) to provide accurate and interpretable predictions.
+Parkinson's Disease is the second most common neurodegenerative disorder, causing tremors, stiffness, and slow movement. Early prediction is crucial for improving patient outcomes. **By default, focus on voice:** [`train.py`](train.py) trains classical models on **22 speech features** from [`data/raw/speech/parkinsons.csv`](data/raw/speech/parkinsons.csv). When you are ready, [`train_dl.py`](train_dl.py) can use **SE-ResNet with attention fusion** across speech, handwriting, and gait with explainability (Grad-CAM).
 
 ## Methodology
 
-- **Architecture**: SE-ResNet 1D + Attention Fusion (multimodal deep learning)
-- **Modalities**: Speech (22 features), Handwriting (10 features), Gait (10 features)
-- **Explainability**: Grad-CAM feature importance, attention weights, SE channel weights
-- **Class Balancing**: SMOTE oversampling
-- **Framework**: PyTorch
+- **Voice-first**: sklearn pipeline in [`train.py`](train.py) — speech only (22 features)
+- **Multimodal (optional)**: SE-ResNet 1D + attention fusion in [`train_dl.py`](train_dl.py) — speech (22) + handwriting (10) + gait (10)
+- **Explainability**: Grad-CAM and attention (multimodal DL path)
+- **Class balancing**: preprocessor options in [`train.py`](train.py); SMOTE in [`train_dl.py`](train_dl.py)
+- **Framework**: PyTorch for multimodal DL; sklearn for the voice-first path
 - **Fallback**: sklearn ensemble (SVM + LR) when DL model is not available
 - **Deployment**: Flask + Waitress WSGI server (Windows/Linux/Mac) with JWT authentication
 
 ## Datasets
 
-This project uses three publicly available real datasets:
+See **[DATASETS.md](DATASETS.md)** for exact CSV paths, column names, row-alignment behavior, and download scripts.
 
-### 1. Speech Data - UCI Parkinson's Dataset
-- **Source**: https://archive.ics.uci.edu/ml/datasets/Parkinsons
+### 1. Speech (voice) — start here
+- **File**: `data/raw/speech/parkinsons.csv`
+- **Source**: [UCI Parkinsons (174)](https://archive.ics.uci.edu/dataset/174/parkinsons) and common mirrors (e.g. [GitHub `parkinsons.csv`](https://raw.githubusercontent.com/SagarBapodara/Parkison-Disease-Detection-using-Machine-Learning/main/Data/parkinsons.csv))
 - **Features**: 22 acoustic measurements (jitter, shimmer, HNR, pitch, nonlinear dynamics)
-- **Samples**: 195 (147 PD, 48 healthy)
+- **Used by**: [`train.py`](train.py) (and multimodal [`train_dl.py`](train_dl.py))
 
-### 2. Handwriting Data - PaHaW / NewHandPD
-- **Features**: 10 kinematic measurements (pressure, velocity, tremor, etc.)
-- **Format**: Pre-extracted features in CSV
-
-### 3. Gait Data - PhysioNet Database
-- **Source**: https://physionet.org/content/gaitpdb/1.0.0/
-- **Features**: 10 temporal-spatial parameters (stride, cadence, speed, asymmetry)
-- **Format**: Processed stride data in CSV
+### 2. Handwriting & gait (optional — multimodal DL only)
+- Needed only for [`train_dl.py`](train_dl.py). See **DATASETS.md** for paths, provenance, and how they differ from off-the-shelf Kaggle/UCI CSVs.
 
 ## Installation
 
@@ -43,7 +38,7 @@ This project uses three publicly available real datasets:
 ### Setup
 
 ```bash
-cd fn
+cd Parkinson   # repository root (use your actual clone path)
 
 # Create and activate virtual environment
 python -m venv venv
@@ -60,13 +55,15 @@ cp .env.example .env
 ## Project Structure
 
 ```
-fn/
+.
 ├── dl_models/            # Deep learning modules
 │   ├── networks.py       # SE-ResNet + Attention Fusion architecture
 │   ├── dataset.py        # PyTorch dataset for multimodal data
 │   ├── trainer.py        # Training loop with early stopping
 │   ├── inference.py      # DL predictor for production inference
 │   └── gradcam.py        # Grad-CAM explainability
+├── common/               # Shared multimodal feature extraction (speech / handwriting / gait)
+├── notebooks/            # Jupyter staff demo (multimodal: tabular + raw WAV/image/video samples)
 ├── src/                  # sklearn fallback and utilities
 │   ├── core/             # Model manager, predictor
 │   ├── data/             # Data loading and preprocessing
@@ -82,6 +79,8 @@ fn/
 │   └── static/           # CSS, JS, images
 ├── models/               # Saved trained models (.joblib, .pt)
 ├── data/                 # Datasets
+├── scripts/              # Maintenance and training helpers
+│   └── train_voice_pipeline.py  # Optional CSV download + voice train + reports/
 ├── train.py              # sklearn training pipeline
 ├── train_dl.py           # Deep learning training pipeline
 ├── wsgi.py               # WSGI entry point (Waitress)
@@ -98,28 +97,48 @@ python train_dl.py
 ```
 
 This trains the SE-ResNet + Attention Fusion model and saves:
-- Model weights to `models/multimodal_pd_net.pt`
+- Model weights to `models/multimodal_pdnet.pt`
 - Feature scalers to `models/dl_*_scaler.joblib`
 - Training plots and metrics
 
 ### 2. Run the Application
 
-**Windows:** run `start.bat`  
-**Linux/Mac:** run `./start.sh`
+- **Full mode (default for this project):** all ML libraries, uploads, and file processing — **Linux/macOS:** `./start-full.sh`
+- **Light mode:** minimal dependencies and custom prediction logic only — **Linux/macOS:** `./start.sh` · **Windows:** `start.bat`
 
-Or manually (any platform):
+Or manually (any platform), after activating `venv` and installing `requirements.txt`:
 
 ```bash
+export USE_LIGHT_MODE=0   # full mode; omit or set to 1 for light mode
 python wsgi.py
 ```
 
-Visit `http://localhost:8000` in your browser.
+The server listens on port **8000** by default (override with the `PORT` environment variable). Visit `http://localhost:8000` in your browser.
 
 ### 3. Stop the Application
 
 ```bash
 ./stop.sh
 ```
+
+### 4. Staff demo: voice pipeline + Jupyter
+
+1. Train and export reports under `reports/`:
+   ```bash
+   python scripts/train_voice_pipeline.py
+   ```
+   Optional: `--download-speech` refreshes CSVs under `data/raw/speech/` from the same fixed HTTPS sources as `data/raw/speech/download_speech_csvs.sh`.
+
+2. Install notebook dependencies: `pip install -r requirements-notebooks.txt`
+
+3. Example WAVs for the staff notebook are **synthetic** and live under `data/examples/speech/`; regenerate with `python scripts/generate_example_speech_wavs.py` if needed (see that folder’s README).
+
+4. From the repository root, start Jupyter and open `notebooks/parkinson_multimodal_staff_demo.ipynb` (speech + handwriting + gait; demo media lives in `notebooks/sample/`).
+
+5. Optional headless check (after installing `requirements-notebooks.txt`; needs network for OpenCV sample downloads):  
+   `MPLBACKEND=Agg jupyter nbconvert --to notebook --execute notebooks/parkinson_multimodal_staff_demo.ipynb --output /tmp/parkinson_multimodal_staff_demo-executed.ipynb --ExecutePreprocessor.timeout=600`
+
+Upload-time feature extraction and this notebook both use the shared **`common/`** package (speech, handwriting, gait), separate from **`webapp/`** and **`src/utils/`** (config).
 
 ## Architecture
 
@@ -166,9 +185,10 @@ Environment variables (`.env`):
 
 ## Testing
 
+Run lightweight checks (e.g. voice pipeline script URL policy):
+
 ```bash
-pytest tests/
-pytest tests/ --cov=src --cov-report=html
+python -m unittest tests.test_voice_pipeline
 ```
 
 ## Tech Stack

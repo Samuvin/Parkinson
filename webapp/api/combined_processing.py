@@ -12,9 +12,9 @@ from flask import Blueprint, request, jsonify
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from utils.audio_processing import extract_speech_features
-from utils.video_processing import extract_gait_features
-from utils.image_processing import extract_handwriting_features
+from common.audio_processing import extract_speech_features
+from common.video_processing import extract_gait_features
+from common.image_processing import extract_handwriting_features
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ def process_combined_video():
                     audio_path = _extract_audio_from_video(tmp_path)
                     if audio_path:
                         features_dict = extract_speech_features(audio_path)
-                        from utils.audio_processing import features_dict_to_array
+                        from common.audio_processing import features_dict_to_array
                         voice_features = features_dict_to_array(features_dict)
                         response_data['voice_features'] = voice_features.tolist()
                         response_data['total_features'] += len(voice_features)
@@ -109,7 +109,7 @@ def process_combined_video():
                     frame_path = _extract_frame_from_video(tmp_path)
                     if frame_path:
                         features_dict = extract_handwriting_features(frame_path)
-                        from utils.image_processing import features_dict_to_array
+                        from common.image_processing import features_dict_to_array
                         handwriting_features = features_dict_to_array(features_dict)
                         response_data['handwriting_features'] = handwriting_features.tolist()
                         response_data['total_features'] += len(handwriting_features)
@@ -129,7 +129,7 @@ def process_combined_video():
                 try:
                     # Extract gait features from video (real extraction)
                     features_dict = extract_gait_features(tmp_path)
-                    from utils.video_processing import features_dict_to_array
+                    from common.video_processing import features_dict_to_array
                     gait_features = features_dict_to_array(features_dict)
                     response_data['gait_features'] = gait_features.tolist()
                     response_data['total_features'] += len(gait_features)

@@ -203,14 +203,17 @@ class DataLoader:
         Raises:
             FileNotFoundError: If handwriting data file doesn't exist
         """
-        handwriting_file = self.handwriting_dir / "handwriting_features.csv"
-        
+        handwriting_file = self.handwriting_dir / "handwriting_data.csv"
+        legacy_hw = self.handwriting_dir / "handwriting_features.csv"
+        if not handwriting_file.exists() and legacy_hw.exists():
+            handwriting_file = legacy_hw
+
         if not handwriting_file.exists():
             raise FileNotFoundError(
-                f"Handwriting dataset not found at {handwriting_file}\n\n"
+                f"Handwriting dataset not found at {self.handwriting_dir / 'handwriting_data.csv'}\n\n"
                 f"This system requires REAL handwriting data.\n"
-                f"Please obtain the PaHaW or NewHandPD dataset and place it at:\n"
-                f"{handwriting_file}\n\n"
+                f"Place a CSV with columns matching the project schema at:\n"
+                f"{self.handwriting_dir / 'handwriting_data.csv'}\n\n"
                 f"Expected format: CSV with features and 'status' column (1=PD, 0=healthy)\n"
                 f"See DATASETS.md for detailed instructions on obtaining this dataset."
             )
@@ -239,16 +242,18 @@ class DataLoader:
         Raises:
             FileNotFoundError: If gait data file doesn't exist
         """
-        gait_file = self.gait_dir / "gait_features.csv"
-        
+        gait_file = self.gait_dir / "gait_data.csv"
+        legacy_gait = self.gait_dir / "gait_features.csv"
+        if not gait_file.exists() and legacy_gait.exists():
+            gait_file = legacy_gait
+
         if not gait_file.exists():
             raise FileNotFoundError(
-                f"Gait dataset not found at {gait_file}\n\n"
+                f"Gait dataset not found at {self.gait_dir / 'gait_data.csv'}\n\n"
                 f"This system requires REAL gait data.\n"
-                f"Please download the PhysioNet Gait in Parkinson's Disease Database:\n"
-                f"https://physionet.org/content/gaitpdb/1.0.0/\n\n"
-                f"After downloading, process and place features at:\n"
-                f"{gait_file}\n\n"
+                f"See https://physionet.org/content/gaitpdb/1.0.0/ and DATASETS.md\n\n"
+                f"After ETL, place features at:\n"
+                f"{self.gait_dir / 'gait_data.csv'}\n\n"
                 f"Expected format: CSV with features and 'status' column (1=PD, 0=healthy)\n"
                 f"See DATASETS.md for detailed instructions."
             )

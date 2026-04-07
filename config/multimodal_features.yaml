@@ -1,0 +1,57 @@
+# Columns loaded from CSV for multimodal deep learning (train_dl.py, dl_models/dataset.py).
+# Paths are relative to data.raw_dir (e.g. data/raw).
+
+label_column: status
+
+csv_paths:
+  speech: speech/parkinsons.csv
+  handwriting: handwriting/handwriting_data.csv
+  gait: gait/gait_data.csv
+
+speech_features:
+  - MDVP:Fo(Hz)
+  - MDVP:Fhi(Hz)
+  - MDVP:Flo(Hz)
+  - MDVP:Jitter(%)
+  - MDVP:Jitter(Abs)
+  - MDVP:RAP
+  - MDVP:PPQ
+  - Jitter:DDP
+  - MDVP:Shimmer
+  - MDVP:Shimmer(dB)
+  - Shimmer:APQ3
+  - Shimmer:APQ5
+  - MDVP:APQ
+  - Shimmer:DDA
+  - NHR
+  - HNR
+  - RPDE
+  - DFA
+  - spread1
+  - spread2
+  - D2
+  - PPE
+
+handwriting_features:
+  - mean_pressure
+  - pressure_variation
+  - mean_velocity
+  - velocity_variation
+  - mean_acceleration
+  - penup_time_ratio
+  - mean_stroke_length
+  - writing_tempo
+  - tremor_power
+  - fluency_score
+
+gait_features:
+  - stride_interval
+  - stride_variability
+  - swing_time
+  - stance_time
+  - double_support_time
+  - gait_speed
+  - cadence
+  - step_length
+  - stride_regularity
+  - gait_asymmetry

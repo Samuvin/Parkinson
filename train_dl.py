@@ -158,8 +158,13 @@ def main() -> None:
     logger.info("Using device: %s", device)
 
     # ---- load data -------------------------------------------------- #
+    mm_spec = data_cfg.get("multimodal_features_config")
     logger.info("Loading data from %s ...", raw_dir)
-    speech, handwriting, gait, labels = load_all_modalities(raw_dir)
+    if mm_spec:
+        logger.info("Using multimodal feature spec: %s", mm_spec)
+    speech, handwriting, gait, labels = load_all_modalities(
+        raw_dir, feature_spec_path=mm_spec,
+    )
     logger.info(
         "Loaded %d samples: speech=%s, handwriting=%s, gait=%s",
         len(labels), speech.shape, handwriting.shape, gait.shape,
@@ -270,12 +275,19 @@ def main() -> None:
     # Combine history + test metrics for JSON
     all_metrics = {
         "model_type": "SE-ResNet1D + Attention Fusion",
+        "input_dims": {
+            "speech": int(speech.shape[1]),
+            "handwriting": int(handwriting.shape[1]),
+            "gait": int(gait.shape[1]),
+        },
         "total_params": total_params,
         "trainable_params": trainable,
         "device": device,
         "epochs_trained": history["total_epochs"],
         "best_val_loss": history["best_val_loss"],
         "elapsed_seconds": history["elapsed_seconds"],
+        "train_loss_history": [float(x) for x in history["train_losses"]],
+        "val_loss_history": [float(x) for x in history["val_losses"]],
         "test_accuracy": test_metrics["accuracy"],
         "test_precision": test_metrics["precision"],
         "test_recall": test_metrics["recall"],
@@ -293,6 +305,7 @@ def main() -> None:
             "noise_std": noise_std,
             "feature_dropout": feature_dropout,
             "use_smote": use_smote,
+            "multimodal_features_config": mm_spec,
         },
     }
     trainer.save_metrics(all_metrics, save_dir / "dl_model_metrics.json")
