@@ -15,6 +15,8 @@ Run these from your machine with the repo root as the working directory unless a
 
 ## Shell helpers in `scripts/`
 
+Use these from **bash** (macOS/Linux terminal, **VS Code integrated terminal** with a bash profile, or **Git Bash** on Windows).
+
 | Command | What happens |
 |--------|----------------|
 | `./scripts/run_app.sh` | Creates `venv/` if missing, activates it, installs `requirements.txt` + `requirements-ml.txt`, then runs **`python wsgi.py`** (same end result as a manual venv + wsgi, with deps refreshed). |
