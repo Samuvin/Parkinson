@@ -71,6 +71,32 @@ const FEATURE_NAMES = {
     ]
 };
 
+// Allowed MIME types per modality (mirrors ALLOWED_* sets in file_upload.py)
+var ALLOWED_MIME = {
+    audio: ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/ogg',
+            'audio/flac', 'audio/x-flac', 'audio/x-m4a', 'audio/mp4', 'audio/aac'],
+    image: ['image/jpeg', 'image/png', 'image/bmp', 'image/tiff', 'image/x-bmp',
+            'image/x-tiff'],
+    video: ['video/mp4', 'video/avi', 'video/x-msvideo', 'video/quicktime',
+            'video/x-matroska', 'video/x-ms-wmv']
+};
+
+/**
+ * Validate a File's MIME type against the allowed list for a given modality.
+ * Returns null if valid, or an error message string if invalid.
+ */
+function validateFileMime(file, modality) {
+    var allowed = ALLOWED_MIME[modality];
+    if (!allowed) { return null; }
+    // file.type may be empty string on some browsers — treat as unknown and allow through
+    if (!file.type) { return null; }
+    if (allowed.indexOf(file.type) === -1) {
+        var labels = { audio: 'WAV, MP3, OGG, FLAC or M4A', image: 'JPG, PNG, BMP or TIFF', video: 'MP4, AVI, MOV or MKV' };
+        return 'Invalid file type "' + file.type + '". Please upload a ' + (labels[modality] || 'supported') + ' file.';
+    }
+    return null;
+}
+
 function formatExtractedFeatureValue(v) {
     var n = Number(v);
     if (!isFinite(n)) {
@@ -892,6 +918,8 @@ function uploadRecordedAudio(audioBlob) {
 function uploadAudioFile() {
     var fileInput = document.getElementById('audioFileInput');
     if (!fileInput.files.length) { showNotification('Please select an audio file first', 'warning'); return; }
+    var mimeErr = validateFileMime(fileInput.files[0], 'audio');
+    if (mimeErr) { showNotification(mimeErr, 'danger'); return; }
     var formData = new FormData();
     formData.append('file', fileInput.files[0]);
     uploadedFilenames.speech = fileInput.files[0].name;
@@ -901,6 +929,8 @@ function uploadAudioFile() {
 function uploadHandwritingFile() {
     var fileInput = document.getElementById('handwritingFileInput');
     if (!fileInput.files.length) { showNotification('Please select an image first', 'warning'); return; }
+    var mimeErr = validateFileMime(fileInput.files[0], 'image');
+    if (mimeErr) { showNotification(mimeErr, 'danger'); return; }
     var formData = new FormData();
     formData.append('file', fileInput.files[0]);
     uploadedFilenames.handwriting = fileInput.files[0].name;
@@ -910,6 +940,8 @@ function uploadHandwritingFile() {
 function uploadGaitFile() {
     var fileInput = document.getElementById('gaitFileInput');
     if (!fileInput.files.length) { showNotification('Please select a video first', 'warning'); return; }
+    var mimeErr = validateFileMime(fileInput.files[0], 'video');
+    if (mimeErr) { showNotification(mimeErr, 'danger'); return; }
     var formData = new FormData();
     formData.append('file', fileInput.files[0]);
     uploadedFilenames.gait = fileInput.files[0].name;

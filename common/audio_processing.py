@@ -85,26 +85,26 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
                 ) from e3
     
     # Create Praat Sound object for analysis
+    sound = None
     try:
         sound = parselmouth.Sound(audio_file_path)
     except Exception as e:
-        error_msg = f"Error loading audio with Praat: {e}"
-        print(error_msg)
-        # Try to create sound from loaded data
+        logger.warning("Praat could not load '%s' directly: %s. Trying temp-WAV fallback.", audio_file_path, e)
         try:
-            # Save temporarily and reload
             import tempfile
             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
                 sf.write(tmp.name, y, sr)
-                sound = parselmouth.Sound(tmp.name)
-                os.unlink(tmp.name)
+                tmp_wav = tmp.name
+            sound = parselmouth.Sound(tmp_wav)
+            os.unlink(tmp_wav)
         except Exception as e2:
-            # If all else fails, raise exception
-            raise RuntimeError(
-                f"Failed to create Praat Sound object from '{audio_file_path}'. "
-                f"Praat error: {e}. Temp file error: {e2}. "
-                f"Please ensure the audio file is valid and contains speech data."
-            ) from e2
+            # Praat is entirely unavailable for this file; continue with default
+            # values for Praat-derived features rather than failing the request.
+            logger.warning(
+                "Praat unavailable for '%s' (direct error: %s; temp-WAV error: %s). "
+                "Praat-derived features will use safe defaults.",
+                audio_file_path, e, e2,
+            )
     
     # Extract features
     features = {}
@@ -121,7 +121,10 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
             return default
     
     # 1-3: Fundamental frequency measures (Fo, Fhi, Flo)
+    f0_values = np.array([])
     try:
+        if sound is None:
+            raise ValueError("Praat Sound unavailable")
         pitch = call(sound, "To Pitch", 0.0, 75, 600)
         f0_values = pitch.selected_array['frequency']
         f0_values = f0_values[f0_values != 0]  # Remove unvoiced frames
@@ -135,13 +138,16 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
             features['MDVP:Fhi(Hz)'] = 160.0
             features['MDVP:Flo(Hz)'] = 80.0
     except Exception as e:
-        logger.warning(f"Pitch extraction failed for '{audio_file_path}': {e}. Using default values.")
+        logger.warning("Pitch extraction failed for '%s': %s. Using default values.", audio_file_path, e)
         features['MDVP:Fo(Hz)'] = 120.0
         features['MDVP:Fhi(Hz)'] = 160.0
         features['MDVP:Flo(Hz)'] = 80.0
     
     # 4-8: Jitter measures
+    point_process = None
     try:
+        if sound is None:
+            raise ValueError("Praat Sound unavailable")
         point_process = call(sound, "To PointProcess (periodic, cc)", 75, 600)
         
         jitter_local = safe_float(call(point_process, "Get jitter (local)", 0, 0, 0.0001, 0.02, 1.3), 0.005)
@@ -156,7 +162,7 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
         features['MDVP:PPQ'] = float(jitter_ppq5)
         features['Jitter:DDP'] = float(jitter_ddp)
     except Exception as e:
-        logger.warning(f"Jitter extraction failed for '{audio_file_path}': {e}. Using default values.")
+        logger.warning("Jitter extraction failed for '%s': %s. Using default values.", audio_file_path, e)
         features['MDVP:Jitter(%)'] = 0.005
         features['MDVP:Jitter(Abs)'] = 0.00005
         features['MDVP:RAP'] = 0.003
@@ -165,6 +171,8 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
     
     # 9-14: Shimmer measures
     try:
+        if sound is None or point_process is None:
+            raise ValueError("Praat Sound or PointProcess unavailable")
         shimmer_local = safe_float(call([sound, point_process], "Get shimmer (local)", 0, 0, 0.0001, 0.02, 1.3, 1.6), 0.03)
         shimmer_local_db = safe_float(call([sound, point_process], "Get shimmer (local_dB)", 0, 0, 0.0001, 0.02, 1.3, 1.6), 0.3)
         shimmer_apq3 = safe_float(call([sound, point_process], "Get shimmer (apq3)", 0, 0, 0.0001, 0.02, 1.3, 1.6), 0.015)
@@ -179,7 +187,7 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
         features['MDVP:APQ'] = float(shimmer_apq11)
         features['Shimmer:DDA'] = float(shimmer_dda)
     except Exception as e:
-        logger.warning(f"Shimmer extraction failed for '{audio_file_path}': {e}. Using default values.")
+        logger.warning("Shimmer extraction failed for '%s': %s. Using default values.", audio_file_path, e)
         features['MDVP:Shimmer'] = 0.03
         features['MDVP:Shimmer(dB)'] = 0.3
         features['Shimmer:APQ3'] = 0.015
@@ -189,6 +197,8 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
     
     # 15-16: Harmonics-to-Noise Ratio
     try:
+        if sound is None:
+            raise ValueError("Praat Sound unavailable")
         harmonicity = call(sound, "To Harmonicity (cc)", 0.01, 75, 0.1, 1.0)
         hnr = safe_float(call(harmonicity, "Get mean", 0, 0), 20.0)
         nhr = safe_float(1.0 / (hnr + 1e-10), 0.02)  # Noise-to-Harmonics Ratio
@@ -196,7 +206,7 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
         features['NHR'] = float(abs(nhr) * 0.01)  # Scale to match dataset range
         features['HNR'] = float(hnr)
     except Exception as e:
-        logger.warning(f"HNR extraction failed for '{audio_file_path}': {e}. Using default values.")
+        logger.warning("HNR extraction failed for '%s': %s. Using default values.", audio_file_path, e)
         features['NHR'] = 0.02
         features['HNR'] = 20.0
     
@@ -223,7 +233,7 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
         # PPE - Pitch Period Entropy
         features['PPE'] = safe_float(estimate_entropy(f0_values), 0.2)
     except Exception as e:
-        logger.warning(f"Nonlinear features extraction failed for '{audio_file_path}': {e}. Using default values.")
+        logger.warning("Nonlinear features extraction failed for '%s': %s. Using default values.", audio_file_path, e)
         features['RPDE'] = 0.5
         features['DFA'] = 0.7
         features['spread1'] = -5.0

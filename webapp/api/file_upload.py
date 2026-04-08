@@ -36,6 +36,63 @@ def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
 
+# Magic-byte signatures for supported formats.
+# Each entry maps to a list of (offset, bytes) tuples — all must match.
+_MAGIC_SIGNATURES = {
+    # Audio
+    'wav':  [(0, b'RIFF'), (8, b'WAVE')],
+    'mp3':  [(0, b'\xff\xfb'), (0, b'\xff\xf3'), (0, b'\xff\xf2'), (0, b'ID3')],
+    'ogg':  [(0, b'OggS')],
+    'flac': [(0, b'fLaC')],
+    'm4a':  [(4, b'ftyp')],
+    # Image
+    'jpg':  [(0, b'\xff\xd8\xff')],
+    'jpeg': [(0, b'\xff\xd8\xff')],
+    'png':  [(0, b'\x89PNG\r\n\x1a\n')],
+    'bmp':  [(0, b'BM')],
+    'tiff': [(0, b'II*\x00'), (0, b'MM\x00*')],
+    # Video
+    'mp4':  [(4, b'ftyp')],
+    'avi':  [(0, b'RIFF'), (8, b'AVI ')],
+    'mov':  [(4, b'ftyp'), (4, b'moov'), (4, b'free'), (4, b'mdat')],
+    'mkv':  [(0, b'\x1a\x45\xdf\xa3')],
+}
+
+
+def validate_magic_bytes(file_path: str, extension: str) -> bool:
+    """Return True if the file's magic bytes match the expected format.
+
+    For extensions with multiple possible signatures (e.g. MP3) any single
+    matching signature is sufficient.  Returns True for unknown extensions so
+    the function is non-breaking when a new extension is added without a
+    corresponding signature entry.
+    """
+    ext = extension.lower().lstrip('.')
+    signatures = _MAGIC_SIGNATURES.get(ext)
+    if not signatures:
+        return True
+
+    try:
+        with open(file_path, 'rb') as fh:
+            header = fh.read(16)
+    except OSError:
+        return False
+
+    # For formats with multiple alternative signatures (mp3, mov) treat each
+    # tuple in the list as one candidate — return True if any candidate matches.
+    if ext in ('mp3', 'mov'):
+        for offset, magic in signatures:
+            if len(header) >= offset + len(magic) and header[offset:offset + len(magic)] == magic:
+                return True
+        return False
+
+    # For all other formats every (offset, magic) tuple must match.
+    for offset, magic in signatures:
+        if len(header) < offset + len(magic) or header[offset:offset + len(magic)] != magic:
+            return False
+    return True
+
+
 @upload_bp.route('/audio', methods=['POST'])
 def upload_audio():
     """Upload audio file and extract 22 speech features."""
@@ -75,10 +132,18 @@ def upload_audio():
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp:
             file.save(tmp.name)
             tmp_path = tmp.name
-        
-        # Note: File format validation will be done by librosa/soundfile
-        # If the file is not a valid audio format, it will fail early with a clear error
-        
+
+        ext = Path(filename).suffix.lstrip('.')
+        if not validate_magic_bytes(tmp_path, ext):
+            os.unlink(tmp_path)
+            return jsonify({
+                'success': False,
+                'error': (
+                    f'The uploaded file does not appear to be a valid {ext.upper()} file. '
+                    'Please ensure the file is not renamed or corrupted and re-upload.'
+                )
+            }), 400
+
         try:
             logger.info("Extracting speech features from: %s (size: %d bytes)", tmp_path, file_size)
             features_dict = extract_speech_features(tmp_path)
@@ -158,7 +223,18 @@ def upload_handwriting():
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp:
             file.save(tmp.name)
             tmp_path = tmp.name
-        
+
+        ext = Path(filename).suffix.lstrip('.')
+        if not validate_magic_bytes(tmp_path, ext):
+            os.unlink(tmp_path)
+            return jsonify({
+                'success': False,
+                'error': (
+                    f'The uploaded file does not appear to be a valid {ext.upper()} file. '
+                    'Please ensure the file is not renamed or corrupted and re-upload.'
+                )
+            }), 400
+
         try:
             features_dict = extract_handwriting_features(tmp_path)
             features_array = image_to_array(features_dict)
@@ -213,7 +289,18 @@ def upload_gait():
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp:
             file.save(tmp.name)
             tmp_path = tmp.name
-        
+
+        ext = Path(filename).suffix.lstrip('.')
+        if not validate_magic_bytes(tmp_path, ext):
+            os.unlink(tmp_path)
+            return jsonify({
+                'success': False,
+                'error': (
+                    f'The uploaded file does not appear to be a valid {ext.upper()} file. '
+                    'Please ensure the file is not renamed or corrupted and re-upload.'
+                )
+            }), 400
+
         try:
             features_dict = extract_gait_features(tmp_path)
             features_array = video_to_array(features_dict)
