@@ -94,19 +94,33 @@ def _extract_features(left: np.ndarray, right: np.ndarray,
     step_length = 0.28 * (cadence ** 0.45)  if cadence > 0 else 0.6
     gait_speed  = step_length * (cadence / 60.0)
 
-    stride_lag  = max(int(stride_interval * fs), 1)
-    norm_left   = left - np.mean(left)
+    # stride_regularity — autocorrelation of the VGRF signal at the stride
+    # period.  Search a ±20 % window around the expected lag so that small
+    # timing estimation errors don't accidentally land on a near-zero or
+    # negative part of the autocorrelation and collapse to 0.
+    stride_lag = max(int(stride_interval * fs), 1)
+    norm_left  = left - np.mean(left)
     if stride_lag < len(norm_left):
         ac = np.correlate(norm_left, norm_left, mode="full")
         ac = ac[len(ac) // 2:]
         ac /= ac[0] + 1e-10
-        stride_regularity = float(np.clip(ac[stride_lag], 0.0, 1.0))
+        lo = max(1, int(stride_lag * 0.8))
+        hi = min(len(ac) - 1, int(stride_lag * 1.2) + 1)
+        stride_regularity = float(np.clip(float(np.max(ac[lo:hi])), 0.0, 1.0))
     else:
         stride_regularity = 0.7
 
-    lm = float(np.mean(left [l_stance])) if np.any(l_stance) else 0.0
-    rm = float(np.mean(right[r_stance])) if np.any(r_stance) else 0.0
-    gait_asymmetry = float(np.clip(abs(lm - rm) / (lm + rm + 1e-10), 0.0, 0.5))
+    # gait_asymmetry — timing asymmetry between left and right stride intervals.
+    # Using force-magnitude asymmetry (old approach) almost always saturates at
+    # the clip ceiling because raw foot-force totals are inherently unequal.
+    # Timing asymmetry is the standard clinical measure (Plotnik et al. 2007).
+    if len(l_strikes) >= 2 and len(r_strikes) >= 2:
+        l_ivs = np.diff(l_strikes) / fs
+        r_ivs = np.diff(r_strikes) / fs
+        ml, mr = float(np.mean(l_ivs)), float(np.mean(r_ivs))
+        gait_asymmetry = float(np.clip(abs(ml - mr) / (ml + mr + 1e-10), 0.0, 1.0))
+    else:
+        gait_asymmetry = 0.0
 
     return {
         "stride_interval":    stride_interval,
