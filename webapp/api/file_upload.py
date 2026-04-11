@@ -3,7 +3,6 @@
 Handles file uploads and extracts features automatically.
 """
 
-import logging
 import os
 import sys
 import tempfile
@@ -19,8 +18,6 @@ sys.path.insert(0, str(project_root))
 from common.audio_processing import extract_speech_features, features_dict_to_array as audio_to_array
 from common.image_processing import extract_handwriting_features, features_dict_to_array as image_to_array
 from common.video_processing import extract_gait_features, features_dict_to_array as video_to_array
-
-logger = logging.getLogger(__name__)
 
 upload_bp = Blueprint('upload', __name__)
 
@@ -145,7 +142,6 @@ def upload_audio():
             }), 400
 
         try:
-            logger.info("Extracting speech features from: %s (size: %d bytes)", tmp_path, file_size)
             features_dict = extract_speech_features(tmp_path)
             features_array = audio_to_array(features_dict)
             os.unlink(tmp_path)
@@ -165,7 +161,6 @@ def upload_audio():
     
     except RuntimeError as e:
         error_msg = str(e)
-        logger.error("Audio extraction failed: %s", error_msg)
         # Provide more specific error messages
         if 'format' in error_msg.lower() or 'not supported' in error_msg.lower() or 'corrupted' in error_msg.lower():
             return jsonify({
@@ -188,7 +183,6 @@ def upload_audio():
                 'error': 'Failed to extract features from audio file. Please ensure the file is a valid audio format and contains speech data.'
             }), 400
     except Exception as e:
-        logger.exception("Error processing audio")
         error_msg = str(e)
         # Check for timeout-related errors
         if 'timeout' in error_msg.lower() or 'worker' in error_msg.lower():
@@ -254,14 +248,12 @@ def upload_handwriting():
                 os.unlink(tmp_path)
             raise e
     
-    except (ValueError, RuntimeError) as e:
-        logger.error("Handwriting extraction failed: %s", str(e))
+    except (ValueError, RuntimeError):
         return jsonify({
             'success': False,
             'error': 'Failed to extract features from handwriting image. Please ensure the image is clear and contains handwriting or drawing.'
         }), 400
-    except Exception as e:
-        logger.exception("Error processing handwriting")
+    except Exception:
         return jsonify({
             'success': False,
             'error': 'An error occurred while processing the handwriting image. Please try again or contact support if the issue persists.'
@@ -320,14 +312,12 @@ def upload_gait():
                 os.unlink(tmp_path)
             raise e
     
-    except (ValueError, RuntimeError) as e:
-        logger.error("Gait extraction failed: %s", str(e))
+    except (ValueError, RuntimeError):
         return jsonify({
             'success': False,
             'error': 'Failed to extract features from gait video. Please ensure the video is valid and contains clear walking/gait movement.'
         }), 400
-    except Exception as e:
-        logger.exception("Error processing gait video")
+    except Exception:
         return jsonify({
             'success': False,
             'error': 'An error occurred while processing the gait video. Please try again or contact support if the issue persists.'

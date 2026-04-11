@@ -1,5 +1,0 @@
-# Optional: Jupyter for staff demos under notebooks/
-# Use together with requirements-ml.txt for PyTorch (MultimodalPDNet cells).
-jupyter>=1.0.0
-ipykernel>=6.0.0
-matplotlib>=3.7.0

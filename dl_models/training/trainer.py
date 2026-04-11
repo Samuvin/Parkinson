@@ -2,17 +2,20 @@
 Training utilities for the MultimodalPDNet.
 
 Provides a ``Trainer`` class that handles:
-    - Online data augmentation (Gaussian noise, feature dropout)
+    - Online data augmentation: Gaussian noise, feature dropout, MixUp
+    - Focal Loss for class-imbalance robustness
     - Train / validation loop with early stopping (val loss or val ROC-AUC)
-    - Learning rate scheduling (ReduceLROnPlateau, cosine annealing, or OneCycle)
-    - Optional mixed precision (CUDA), AdamW, class-weighted BCE, label smoothing
+    - LR scheduling: ReduceLROnPlateau, CosineAnnealing, OneCycleLR,
+      or cosine_warmup (linear warm-up → cosine decay — recommended)
+    - Gradient accumulation for stable updates with small batches
+    - Optional mixed precision (CUDA)
+    - Validation-set threshold calibration (F1-optimal threshold)
     - Best model checkpointing and metric plots
 """
 
 from __future__ import annotations
 
 import json
-import logging
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -24,6 +27,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -35,47 +39,96 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay,
 )
 from torch.cuda.amp import GradScaler, autocast
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
-from dl_models.data.dataset import MultimodalPDDataset
 from dl_models.algorithm.networks import MultimodalPDNet
 
-logger = logging.getLogger(__name__)
+
+# --------------------------------------------------------------------------- #
+#  Focal Loss                                                                   #
+# --------------------------------------------------------------------------- #
+
+class FocalBCELoss(nn.Module):
+    """Focal loss for binary classification (Lin et al., RetinaNet 2017).
+
+    Reduces the contribution from easy, well-classified examples by scaling
+    the standard BCE loss by ``(1 - p_t) ** gamma``, focusing training on
+    hard, misclassified examples.
+
+    Args:
+        gamma: Focusing parameter (0 = standard BCE, 2 = recommended default).
+        pos_weight: Optional scalar weight for the positive class (same
+                    semantics as ``nn.BCEWithLogitsLoss(pos_weight=…)``).
+    """
+
+    def __init__(
+        self,
+        gamma: float = 2.0,
+        pos_weight: Optional[torch.Tensor] = None,
+    ) -> None:
+        super().__init__()
+        self.gamma = gamma
+        if pos_weight is not None:
+            self.register_buffer("pos_weight", pos_weight)
+        else:
+            self.pos_weight: Optional[torch.Tensor] = None
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        pw = getattr(self, "pos_weight", None)
+        bce = F.binary_cross_entropy_with_logits(
+            logits, targets, pos_weight=pw, reduction="none",
+        )
+        prob = torch.sigmoid(logits)
+        p_t = targets * prob + (1.0 - targets) * (1.0 - prob)
+        focal_weight = (1.0 - p_t).pow(self.gamma)
+        return (focal_weight * bce).mean()
 
 
-# ------------------------------------------------------------------ #
-#  Data Augmentation                                                  #
-# ------------------------------------------------------------------ #
+# --------------------------------------------------------------------------- #
+#  Data Augmentation                                                            #
+# --------------------------------------------------------------------------- #
 
 def augment_batch(
     batch: dict[str, torch.Tensor],
     noise_std: float = 0.05,
     feature_dropout: float = 0.1,
+    mixup_alpha: float = 0.0,
 ) -> dict[str, torch.Tensor]:
-    """Apply in-place Gaussian noise and random feature dropout.
+    """Apply Gaussian noise, feature dropout, and optionally MixUp.
+
+    MixUp (Zhang et al., 2018) linearly interpolates two random training
+    samples (and their labels) which acts as a strong regulariser for
+    small tabular datasets.
 
     Args:
-        batch: Dict with keys ``speech``, ``handwriting``, ``gait``,
-               ``label``.  Tensors are modified in place.
-        noise_std: Std-dev of additive Gaussian noise (features are z-scored).
-        feature_dropout: Probability of zeroing a feature.
+        batch: Dict with keys ``speech``, ``handwriting``, ``gait``, ``label``.
+        noise_std: Std-dev of additive Gaussian noise.
+        feature_dropout: Probability of zeroing each feature independently.
+        mixup_alpha: Beta-distribution alpha for MixUp (0 disables MixUp).
 
     Returns:
-        The same batch dict (modified).
+        The same batch dict with augmented tensors.
     """
     for key in ("speech", "handwriting", "gait"):
         x = batch[key]
-        noise = torch.randn_like(x) * noise_std
-        x = x + noise
+        x = x + torch.randn_like(x) * noise_std
         mask = torch.rand_like(x) > feature_dropout
-        x = x * mask
-        batch[key] = x
+        batch[key] = x * mask
+
+    if mixup_alpha > 0.0:
+        B = batch["speech"].shape[0]
+        if B > 1:
+            lam = float(np.random.beta(mixup_alpha, mixup_alpha))
+            perm = torch.randperm(B, device=batch["speech"].device)
+            for key in ("speech", "handwriting", "gait", "label"):
+                batch[key] = lam * batch[key] + (1.0 - lam) * batch[key][perm]
+
     return batch
 
 
-# ------------------------------------------------------------------ #
-#  Trainer                                                            #
-# ------------------------------------------------------------------ #
+# --------------------------------------------------------------------------- #
+#  Trainer                                                                      #
+# --------------------------------------------------------------------------- #
 
 class Trainer:
     """Training loop for ``MultimodalPDNet``.
@@ -83,43 +136,53 @@ class Trainer:
     Args:
         model: An instance of ``MultimodalPDNet``.
         device: ``'cpu'``, ``'cuda'``, or ``'mps'``.
-        lr: Initial / max learning rate (default 0.001).
-        weight_decay: AdamW weight decay (default 1e-4).
-        patience: Early stopping patience in epochs (default 15).
-        noise_std: Augmentation noise level (default 0.05).
-        feature_dropout: Augmentation feature dropout (default 0.1).
-        grad_clip_norm: Max gradient norm (0 disables clipping).
-        label_smoothing: Epsilon for soft binary targets in ``[0, 1]``.
-        pos_weight: Positive-class weight for ``BCEWithLogitsLoss`` (imbalanced data).
-        use_amp: Use automatic mixed precision on CUDA only.
-        num_workers: ``DataLoader`` worker processes.
-        lr_scheduler: ``plateau``, ``cosine``, or ``onecycle``.
-        plateau_factor: LR multiply factor when plateau fires.
-        plateau_patience: Epochs with no val-loss improvement before LR drop.
-        onecycle_pct_start: Fraction of steps in the increasing-LR phase.
-        early_stop_monitor: ``val_loss`` (minimize) or ``val_roc_auc`` (maximize).
+        lr: Initial / max learning rate (default 3e-4).
+        weight_decay: AdamW weight decay (default 1e-3).
+        patience: Early stopping patience in epochs (default 30).
+        noise_std: Augmentation noise std-dev (default 0.05).
+        feature_dropout: Augmentation feature dropout probability (default 0.1).
+        mixup_alpha: MixUp Beta-distribution alpha; 0 disables MixUp (default 0.2).
+        grad_clip_norm: Max gradient norm; 0 disables clipping (default 1.0).
+        label_smoothing: Soft-label epsilon in ``[0, 1]`` (default 0.05).
+        pos_weight: Positive-class weight for the loss (imbalanced data).
+        use_focal_loss: Use Focal BCE instead of standard BCE (default True).
+        focal_gamma: Focusing exponent for Focal Loss (default 2.0).
+        use_amp: Enable AMP on CUDA (default True).
+        num_workers: DataLoader worker count (default 0).
+        accumulate_grad_batches: Gradient accumulation steps (default 1).
+        lr_scheduler: ``plateau`` | ``cosine`` | ``onecycle`` | ``cosine_warmup``.
+        warmup_epochs: Linear warm-up epochs for ``cosine_warmup`` (default 10).
+        plateau_factor: LR reduction factor for plateau scheduler (default 0.5).
+        plateau_patience: Plateau patience in epochs (default 5).
+        onecycle_pct_start: Fraction of steps in OneCycle rising phase (default 0.1).
+        early_stop_monitor: ``val_loss`` (minimise) or ``val_roc_auc`` (maximise).
     """
 
     def __init__(
         self,
         model: MultimodalPDNet,
         device: str = "cpu",
-        lr: float = 1e-3,
-        weight_decay: float = 1e-4,
-        patience: int = 15,
+        lr: float = 3e-4,
+        weight_decay: float = 1e-3,
+        patience: int = 30,
         noise_std: float = 0.05,
         feature_dropout: float = 0.1,
+        mixup_alpha: float = 0.2,
         *,
         grad_clip_norm: float = 1.0,
-        label_smoothing: float = 0.0,
+        label_smoothing: float = 0.05,
         pos_weight: Optional[float] = None,
+        use_focal_loss: bool = True,
+        focal_gamma: float = 2.0,
         use_amp: bool = False,
         num_workers: int = 0,
-        lr_scheduler: str = "plateau",
+        accumulate_grad_batches: int = 1,
+        lr_scheduler: str = "cosine_warmup",
+        warmup_epochs: int = 10,
         plateau_factor: float = 0.5,
         plateau_patience: int = 5,
         onecycle_pct_start: float = 0.1,
-        early_stop_monitor: str = "val_loss",
+        early_stop_monitor: str = "val_roc_auc",
     ) -> None:
         self.model = model.to(device)
         self.device = device
@@ -127,16 +190,26 @@ class Trainer:
         self.patience = patience
         self.noise_std = noise_std
         self.feature_dropout = feature_dropout
+        self.mixup_alpha = mixup_alpha
         self.grad_clip_norm = grad_clip_norm
         self.label_smoothing = label_smoothing
+        self.accumulate_grad_batches = max(1, int(accumulate_grad_batches))
         self.use_amp = bool(
             use_amp and device == "cuda" and torch.cuda.is_available()
         )
         self.num_workers = max(0, int(num_workers))
         self.lr_scheduler_kind = lr_scheduler.strip().lower()
+        self.warmup_epochs = max(1, int(warmup_epochs))
         self.plateau_factor = plateau_factor
         self.plateau_patience = plateau_patience
         self.onecycle_pct_start = onecycle_pct_start
+
+        _valid_schedulers = ("plateau", "cosine", "onecycle", "cosine_warmup")
+        if self.lr_scheduler_kind not in _valid_schedulers:
+            raise ValueError(
+                f"lr_scheduler must be one of {_valid_schedulers}",
+            )
+
         esm = early_stop_monitor.strip().lower()
         if esm not in ("val_loss", "val_roc_auc"):
             raise ValueError(
@@ -144,17 +217,18 @@ class Trainer:
             )
         self.early_stop_monitor = esm
 
-        if self.lr_scheduler_kind not in ("plateau", "cosine", "onecycle"):
-            raise ValueError(
-                "lr_scheduler must be 'plateau', 'cosine', or 'onecycle'",
-            )
-
         pw_tensor: Optional[torch.Tensor] = None
         if pos_weight is not None and pos_weight > 0:
             pw_tensor = torch.tensor(
                 [float(pos_weight)], device=device, dtype=torch.float32,
             )
-        self.criterion = nn.BCEWithLogitsLoss(pos_weight=pw_tensor)
+
+        if use_focal_loss:
+            self.criterion: nn.Module = FocalBCELoss(
+                gamma=focal_gamma, pos_weight=pw_tensor,
+            )
+        else:
+            self.criterion = nn.BCEWithLogitsLoss(pos_weight=pw_tensor)
 
         self.optimizer = torch.optim.AdamW(
             model.parameters(), lr=lr, weight_decay=weight_decay,
@@ -166,6 +240,8 @@ class Trainer:
         if self.use_amp:
             self._scaler = GradScaler()
 
+        self.threshold: float = 0.5
+
         # History
         self.train_losses: list[float] = []
         self.val_losses: list[float] = []
@@ -176,28 +252,36 @@ class Trainer:
         self.epochs_no_improve = 0
         self.best_state: Optional[dict] = None
 
+    # --------------------------------------------------------------------- #
+    #  Label smoothing                                                        #
+    # --------------------------------------------------------------------- #
+
     def _smooth_labels(self, labels: torch.Tensor) -> torch.Tensor:
         if self.label_smoothing <= 0.0:
             return labels
         eps = self.label_smoothing
         return labels * (1.0 - eps) + (1.0 - labels) * eps
 
-    # -- single epoch ------------------------------------------------- #
+    # --------------------------------------------------------------------- #
+    #  Single epoch                                                           #
+    # --------------------------------------------------------------------- #
 
     def _train_epoch(
         self,
         loader: DataLoader,
         augment: bool = True,
     ) -> float:
-        """Run one training epoch. Returns average loss."""
+        """Run one training epoch with gradient accumulation. Returns avg loss."""
         self.model.train()
         total_loss = 0.0
         n_batches = 0
+        accum = self.accumulate_grad_batches
+        self.optimizer.zero_grad(set_to_none=True)
 
-        for batch in loader:
+        for step, batch in enumerate(loader):
             if augment:
                 batch = augment_batch(
-                    batch, self.noise_std, self.feature_dropout,
+                    batch, self.noise_std, self.feature_dropout, self.mixup_alpha,
                 )
 
             speech = batch["speech"].to(self.device)
@@ -205,36 +289,36 @@ class Trainer:
             gait = batch["gait"].to(self.device)
             labels = self._smooth_labels(batch["label"].to(self.device))
 
-            self.optimizer.zero_grad(set_to_none=True)
-
             if self.use_amp and self._scaler is not None:
                 with autocast():
                     out = self.model(speech, handwriting, gait)
-                    loss = self.criterion(
-                        out["logit"].squeeze(-1), labels,
-                    )
+                    loss = self.criterion(out["logit"].squeeze(-1), labels) / accum
                 self._scaler.scale(loss).backward()
-                if self.grad_clip_norm > 0:
-                    self._scaler.unscale_(self.optimizer)
-                    nn.utils.clip_grad_norm_(
-                        self.model.parameters(), max_norm=self.grad_clip_norm,
-                    )
-                self._scaler.step(self.optimizer)
-                self._scaler.update()
             else:
                 out = self.model(speech, handwriting, gait)
-                loss = self.criterion(out["logit"].squeeze(-1), labels)
+                loss = self.criterion(out["logit"].squeeze(-1), labels) / accum
                 loss.backward()
+
+            is_last_batch = (step + 1) == len(loader)
+            if (step + 1) % accum == 0 or is_last_batch:
                 if self.grad_clip_norm > 0:
+                    if self._scaler is not None:
+                        self._scaler.unscale_(self.optimizer)
                     nn.utils.clip_grad_norm_(
                         self.model.parameters(), max_norm=self.grad_clip_norm,
                     )
-                self.optimizer.step()
+                if self._scaler is not None:
+                    self._scaler.step(self.optimizer)
+                    self._scaler.update()
+                else:
+                    self.optimizer.step()
 
-            if self._onecycle is not None:
-                self._onecycle.step()
+                self.optimizer.zero_grad(set_to_none=True)
 
-            total_loss += loss.item()
+                if self._onecycle is not None:
+                    self._onecycle.step()
+
+            total_loss += loss.item() * accum
             n_batches += 1
 
         return total_loss / max(n_batches, 1)
@@ -261,6 +345,7 @@ class Trainer:
             else:
                 out = self.model(speech, handwriting, gait)
                 loss = self.criterion(out["logit"].squeeze(-1), labels)
+
             total_loss += loss.item()
             n_batches += 1
 
@@ -272,19 +357,26 @@ class Trainer:
 
         y_true = np.concatenate(all_labels)
         y_prob = np.concatenate(all_probs)
-        y_pred = (y_prob >= 0.5).astype(int)
+        y_pred = (y_prob >= self.threshold).astype(int)
 
-        metrics = {
+        metrics: dict[str, Any] = {
             "accuracy": float(accuracy_score(y_true, y_pred)),
             "precision": float(precision_score(y_true, y_pred, zero_division=0)),
             "recall": float(recall_score(y_true, y_pred, zero_division=0)),
             "f1": float(f1_score(y_true, y_pred, zero_division=0)),
-            "roc_auc": float(roc_auc_score(y_true, y_prob))
-            if len(np.unique(y_true)) > 1
-            else 0.0,
+            "roc_auc": (
+                float(roc_auc_score(y_true, y_prob))
+                if len(np.unique(y_true)) > 1
+                else 0.0
+            ),
+            "y_true": y_true,
+            "y_prob": y_prob,
         }
-
         return avg_loss, metrics
+
+    # --------------------------------------------------------------------- #
+    #  Schedulers                                                             #
+    # --------------------------------------------------------------------- #
 
     def _setup_schedulers(self, epochs: int, steps_per_epoch: int) -> None:
         """Attach per-epoch or OneCycle LR schedulers for this run."""
@@ -316,12 +408,30 @@ class Trainer:
                 steps_per_epoch=steps_i,
                 pct_start=self.onecycle_pct_start,
             )
+        elif kind == "cosine_warmup":
+            # Linear warm-up for `warmup_epochs`, then cosine decay to 1 % of base_lr.
+            # SequentialLR chains two schedulers at a milestone epoch.
+            w = min(self.warmup_epochs, epochs_i - 1)
+            warmup_sched = torch.optim.lr_scheduler.LinearLR(
+                self.optimizer,
+                start_factor=1e-3,
+                end_factor=1.0,
+                total_iters=w,
+            )
+            cosine_sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer,
+                T_max=max(epochs_i - w, 1),
+                eta_min=max(self.base_lr * 0.01, 1e-7),
+            )
+            self._epoch_scheduler = torch.optim.lr_scheduler.SequentialLR(
+                self.optimizer,
+                schedulers=[warmup_sched, cosine_sched],
+                milestones=[w],
+            )
 
-    def _dataloader_kwargs(self) -> dict[str, Any]:
-        return {
-            "num_workers": self.num_workers,
-            "pin_memory": self.device == "cuda",
-        }
+    # --------------------------------------------------------------------- #
+    #  Early stopping helpers                                                 #
+    # --------------------------------------------------------------------- #
 
     def _early_stop_improved(
         self, val_loss: float, val_roc_auc: float,
@@ -336,27 +446,69 @@ class Trainer:
         else:
             self._best_monitor_score = val_loss
 
-    # -- full training loop ------------------------------------------- #
+    def _dataloader_kwargs(self) -> dict[str, Any]:
+        return {
+            "num_workers": self.num_workers,
+            "pin_memory": self.device == "cuda",
+        }
+
+    # --------------------------------------------------------------------- #
+    #  Threshold calibration                                                  #
+    # --------------------------------------------------------------------- #
+
+    def calibrate_threshold(
+        self, val_dataset: Dataset, batch_size: int = 32,
+    ) -> float:
+        """Find the F1-maximising classification threshold on the validation set.
+
+        Scans 81 candidate thresholds in [0.10, 0.90] and picks the one that
+        yields the highest macro-F1.  Updates ``self.threshold`` in place.
+
+        Returns:
+            The optimal threshold (also stored as ``self.threshold``).
+        """
+        loader = DataLoader(
+            val_dataset, batch_size=batch_size, shuffle=False,
+            **self._dataloader_kwargs(),
+        )
+        _, metrics = self._eval_epoch(loader)
+        y_true = metrics["y_true"]
+        y_prob = metrics["y_prob"]
+
+        best_t, best_f1 = 0.5, 0.0
+        for t in np.linspace(0.10, 0.90, 81):
+            preds = (y_prob >= t).astype(int)
+            f1 = f1_score(y_true, preds, zero_division=0)
+            if f1 > best_f1:
+                best_f1, best_t = f1, float(t)
+
+        self.threshold = best_t
+        return best_t
+
+    # --------------------------------------------------------------------- #
+    #  Full training loop                                                     #
+    # --------------------------------------------------------------------- #
 
     def fit(
         self,
-        train_dataset: MultimodalPDDataset,
-        val_dataset: MultimodalPDDataset,
-        epochs: int = 100,
+        train_dataset: Dataset,
+        val_dataset: Dataset,
+        epochs: int = 300,
         batch_size: int = 32,
         augment: bool = True,
     ) -> dict[str, Any]:
-        """Train the model with early stopping.
+        """Train the model with early stopping and threshold calibration.
 
         Args:
-            train_dataset: Training ``MultimodalPDDataset``.
-            val_dataset: Validation ``MultimodalPDDataset``.
+            train_dataset: Training dataset (``MultimodalPDDataset`` or
+                           ``ModalityMatchedDataset``).
+            val_dataset: Validation dataset (same interface).
             epochs: Maximum number of epochs.
-            batch_size: Batch size.
-            augment: Whether to apply online augmentation.
+            batch_size: Mini-batch size.
+            augment: Enable online data augmentation.
 
         Returns:
-            Dict with final training metrics and history.
+            Dict with training history and best validation metrics.
         """
         dl_kw = self._dataloader_kwargs()
         train_loader = DataLoader(
@@ -381,25 +533,24 @@ class Trainer:
         self.val_roc_aucs.clear()
         self.best_val_loss = float("inf")
         self.best_val_roc_auc = float("-inf")
-        if self.early_stop_monitor == "val_roc_auc":
-            self._best_monitor_score = float("-inf")
-        else:
-            self._best_monitor_score = float("inf")
+        self._best_monitor_score = (
+            float("-inf") if self.early_stop_monitor == "val_roc_auc" else float("inf")
+        )
         self.epochs_no_improve = 0
         self.best_state = None
 
         start_time = time.time()
-        logger.info(
-            "Starting training: %d epochs, batch_size=%d, device=%s, "
-            "scheduler=%s, early_stop=%s, amp=%s, workers=%d",
-            epochs,
-            batch_size,
-            self.device,
-            self.lr_scheduler_kind,
-            self.early_stop_monitor,
-            self.use_amp,
-            self.num_workers,
-        )
+
+        print(f"\n  Device    : {self.device}")
+        print(f"  Train     : {len(train_dataset)} samples  |  Val: {len(val_dataset)} samples")
+        print(f"  Epochs    : up to {epochs}  |  Patience: {self.patience}")
+        print(f"  Scheduler : {self.lr_scheduler_kind}"
+              + (f"  (warmup={self.warmup_epochs})" if self.lr_scheduler_kind == "cosine_warmup" else ""))
+        print(f"  Loss      : {'Focal BCE' if isinstance(self.criterion, FocalBCELoss) else 'BCE'}"
+              + f"  |  MixUp α={self.mixup_alpha}  |  GradAccum={self.accumulate_grad_batches}")
+        print(f"\n  {'Epoch':>6}  {'Train Loss':>10}  {'Val Loss':>9}  "
+              f"{'Val AUC':>8}  {'LR':>9}  Status")
+        print(f"  {'-'*6}  {'-'*10}  {'-'*9}  {'-'*8}  {'-'*9}  {'-'*18}")
 
         for epoch in range(1, epochs + 1):
             train_loss = self._train_epoch(train_loader, augment=augment)
@@ -407,66 +558,54 @@ class Trainer:
 
             self.train_losses.append(train_loss)
             self.val_losses.append(val_loss)
-            self.val_roc_aucs.append(val_metrics["roc_auc"])
+            auc = val_metrics["roc_auc"]
+            self.val_roc_aucs.append(auc)
 
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
-            auc = val_metrics["roc_auc"]
             if auc > self.best_val_roc_auc:
                 self.best_val_roc_auc = auc
 
             if self._epoch_scheduler is not None:
                 if self.lr_scheduler_kind == "plateau":
                     self._epoch_scheduler.step(val_loss)
-                elif self.lr_scheduler_kind == "cosine":
+                else:
                     self._epoch_scheduler.step()
 
             current_lr = self.optimizer.param_groups[0]["lr"]
 
-            if epoch % 5 == 0 or epoch == 1:
-                logger.info(
-                    "Epoch %3d/%d | Train Loss: %.4f | Val Loss: %.4f | "
-                    "Val Acc: %.3f | Val AUC: %.3f | LR: %.6f",
-                    epoch,
-                    epochs,
-                    train_loss,
-                    val_loss,
-                    val_metrics["accuracy"],
-                    val_metrics["roc_auc"],
-                    current_lr,
-                )
-
-            if self._early_stop_improved(val_loss, val_metrics["roc_auc"]):
-                self._early_stop_update_best(val_loss, val_metrics["roc_auc"])
+            improved = self._early_stop_improved(val_loss, auc)
+            if improved:
+                self._early_stop_update_best(val_loss, auc)
                 self.epochs_no_improve = 0
                 self.best_state = {
                     k: v.cpu().clone()
                     for k, v in self.model.state_dict().items()
                 }
+                status = "✓ best"
             else:
                 self.epochs_no_improve += 1
+                status = f"no-improve {self.epochs_no_improve}/{self.patience}"
+
+            print(
+                f"  {epoch:>6}  {train_loss:>10.4f}  {val_loss:>9.4f}  "
+                f"{auc:>8.4f}  {current_lr:>9.2e}  {status}",
+                flush=True,
+            )
 
             if self.epochs_no_improve >= self.patience:
-                logger.info(
-                    "Early stopping at epoch %d (patience=%d, monitor=%s).",
-                    epoch,
-                    self.patience,
-                    self.early_stop_monitor,
-                )
+                print(f"\n  Early stopping at epoch {epoch} "
+                      f"(no improvement for {self.patience} epochs)")
                 break
 
         elapsed = time.time() - start_time
-        logger.info("Training completed in %.1f seconds.", elapsed)
 
         if self.best_state is not None:
             self.model.load_state_dict(self.best_state)
-            logger.info(
-                "Restored best checkpoint (monitor=%s, best_val_loss=%.4f, "
-                "best_val_auc=%.4f).",
-                self.early_stop_monitor,
-                self.best_val_loss,
-                self.best_val_roc_auc,
-            )
+
+        # ---- threshold calibration on val set ----------------------------- #
+        best_t = self.calibrate_threshold(val_dataset, batch_size=batch_size)
+        print(f"\n  Threshold calibration (F1-optimal on val): {best_t:.3f}")
 
         return {
             "train_losses": self.train_losses,
@@ -474,20 +613,35 @@ class Trainer:
             "val_roc_aucs": self.val_roc_aucs,
             "best_val_loss": self.best_val_loss,
             "best_val_roc_auc": self.best_val_roc_auc,
+            "optimal_threshold": best_t,
             "total_epochs": len(self.train_losses),
             "elapsed_seconds": elapsed,
         }
 
-    # -- evaluation --------------------------------------------------- #
+    # --------------------------------------------------------------------- #
+    #  Evaluation                                                             #
+    # --------------------------------------------------------------------- #
 
     def evaluate(
-        self, test_dataset: MultimodalPDDataset, batch_size: int = 32,
+        self,
+        test_dataset: Dataset,
+        batch_size: int = 32,
+        threshold: Optional[float] = None,
     ) -> dict[str, Any]:
-        """Evaluate on the test set.
+        """Evaluate on the test set using the calibrated threshold.
+
+        Args:
+            test_dataset: Test dataset.
+            batch_size: Batch size for inference.
+            threshold: Override threshold (default: ``self.threshold``).
 
         Returns:
             Dict with metrics, predictions, probabilities, and labels.
         """
+        saved_t = self.threshold
+        if threshold is not None:
+            self.threshold = threshold
+
         loader = DataLoader(
             test_dataset,
             batch_size=batch_size,
@@ -496,36 +650,23 @@ class Trainer:
         )
         loss, metrics = self._eval_epoch(loader)
         metrics["test_loss"] = loss
+        metrics["threshold_used"] = self.threshold
 
-        # Collect predictions for plots
-        all_probs = []
-        all_labels = []
-        with torch.no_grad():
-            for batch in loader:
-                out = self.model(
-                    batch["speech"].to(self.device),
-                    batch["handwriting"].to(self.device),
-                    batch["gait"].to(self.device),
-                )
-                all_probs.append(
-                    out["probability"].squeeze(-1).cpu().numpy(),
-                )
-                all_labels.append(batch["label"].numpy())
+        # Re-compute preds using calibrated threshold (already done in _eval_epoch)
+        metrics["y_pred"] = (metrics["y_prob"] >= self.threshold).astype(int)
 
-        metrics["y_true"] = np.concatenate(all_labels)
-        metrics["y_prob"] = np.concatenate(all_probs)
-        metrics["y_pred"] = (metrics["y_prob"] >= 0.5).astype(int)
-
+        self.threshold = saved_t
         return metrics
 
-    # -- saving ------------------------------------------------------- #
+    # --------------------------------------------------------------------- #
+    #  Saving                                                                 #
+    # --------------------------------------------------------------------- #
 
     def save_model(self, path: str | Path) -> None:
         """Save model state dict to *path*."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.model.state_dict(), path)
-        logger.info("Model saved to %s", path)
 
     def save_metrics(
         self, metrics: dict[str, Any], path: str | Path,
@@ -534,7 +675,6 @@ class Trainer:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Strip numpy arrays for JSON
         clean: dict[str, Any] = {}
         for k, v in metrics.items():
             if isinstance(v, np.ndarray):
@@ -546,9 +686,10 @@ class Trainer:
 
         with open(path, "w") as f:
             json.dump(clean, f, indent=2)
-        logger.info("Metrics saved to %s", path)
 
-    # -- plotting ----------------------------------------------------- #
+    # --------------------------------------------------------------------- #
+    #  Plotting                                                               #
+    # --------------------------------------------------------------------- #
 
     def plot_training_curves(self, save_path: str | Path) -> None:
         """Save train/val loss curves and validation ROC-AUC."""
@@ -559,7 +700,7 @@ class Trainer:
         ax1.plot(self.train_losses, label="Train Loss", color="tab:blue")
         ax1.plot(self.val_losses, label="Val Loss", color="tab:orange")
         ax1.set_xlabel("Epoch")
-        ax1.set_ylabel("BCE Loss")
+        ax1.set_ylabel("Loss")
         ax1.grid(True, alpha=0.3)
 
         if self.val_roc_aucs:
@@ -583,7 +724,6 @@ class Trainer:
         fig.tight_layout()
         fig.savefig(save_path, dpi=150)
         plt.close(fig)
-        logger.info("Training curves saved to %s", save_path)
 
     @staticmethod
     def plot_roc_curve(
@@ -609,7 +749,6 @@ class Trainer:
         fig.tight_layout()
         fig.savefig(save_path, dpi=150)
         plt.close(fig)
-        logger.info("ROC curve saved to %s", save_path)
 
     @staticmethod
     def plot_confusion_matrix(
@@ -631,4 +770,3 @@ class Trainer:
         fig.tight_layout()
         fig.savefig(save_path, dpi=150)
         plt.close(fig)
-        logger.info("Confusion matrix saved to %s", save_path)

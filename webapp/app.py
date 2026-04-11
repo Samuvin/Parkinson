@@ -2,9 +2,7 @@
 
 import sys
 import os
-import logging
 from pathlib import Path
-from logging.handlers import RotatingFileHandler
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -20,29 +18,6 @@ from webapp.api.detect import detect_bp, get_manager
 
 from webapp.api.auth import auth_bp
 from webapp.middleware.auth import enforce_auth
-
-
-def setup_logging(app):
-    """Configure production logging."""
-    if not app.debug:
-        # Create logs directory
-        logs_dir = project_root / 'logs'
-        logs_dir.mkdir(exist_ok=True)
-
-        # File handler
-        file_handler = RotatingFileHandler(
-            logs_dir / 'app.log',
-            maxBytes=10240000,  # 10MB
-            backupCount=10
-        )
-        file_handler.setFormatter(logging.Formatter(
-            '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
-        ))
-        file_handler.setLevel(logging.INFO)
-        app.logger.addHandler(file_handler)
-
-        app.logger.setLevel(logging.INFO)
-        app.logger.info('Parkinson\'s Detection System startup')
 
 
 def create_app(config_path=None):
@@ -67,9 +42,6 @@ def create_app(config_path=None):
     app.config['DEBUG'] = False
     app.config['TESTING'] = False
 
-    # Setup logging
-    setup_logging(app)
-
     # Enable CORS
     CORS(app)
 
@@ -85,9 +57,8 @@ def create_app(config_path=None):
     try:
         manager = get_manager()
         loaded_models = manager.get_loaded_modalities()
-        app.logger.info("Models loaded on startup: %s", ', '.join(loaded_models))
-    except Exception as e:
-        app.logger.warning("Could not load models on startup: %s", e)
+    except Exception:
+        pass
 
     from webapp.api.results import results_bp
     app.register_blueprint(results_bp, url_prefix='/api')

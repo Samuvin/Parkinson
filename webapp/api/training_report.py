@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from flask import Blueprint, jsonify
 
 from webapp.services.training_report import load_training_report
-
-logger = logging.getLogger(__name__)
 
 training_report_bp = Blueprint("training_report", __name__)
 
@@ -30,5 +27,4 @@ def get_training_report():
         payload = load_training_report(_project_root())
         return jsonify(payload), 200
     except Exception as e:
-        logger.exception("training_report failed")
         return jsonify({"success": False, "error": str(e)}), 500

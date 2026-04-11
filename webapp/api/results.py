@@ -1,6 +1,5 @@
 """Results API endpoints for retrieving detection history."""
 
-import logging
 from flask import Blueprint, request, jsonify, g
 
 from webapp.models.detection_result import (
@@ -9,8 +8,6 @@ from webapp.models.detection_result import (
     find_by_id,
     count_by_user_id
 )
-
-logger = logging.getLogger(__name__)
 
 results_bp = Blueprint('results', __name__)
 
@@ -74,7 +71,6 @@ def get_results():
         })
 
     except Exception as e:
-        logger.exception("Failed to retrieve results")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -114,7 +110,6 @@ def get_result_by_id(result_id):
         })
 
     except Exception as e:
-        logger.exception("Failed to retrieve result by ID")
         return jsonify({
             'success': False,
             'error': str(e)

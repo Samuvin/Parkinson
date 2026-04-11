@@ -4,14 +4,10 @@ Handles model persistence and retrieval (Single Responsibility).
 """
 
 import joblib
-import logging
 from pathlib import Path
 from typing import Dict, Optional
 from src.core.interfaces import IModelLoader, IPredictor, IFeatureScaler
 from src.adapters.model_adapter import SklearnModelAdapter, SklearnScalerAdapter
-
-logger = logging.getLogger(__name__)
-
 
 class FileSystemModelLoader(IModelLoader):
     """Loads models from filesystem using joblib."""
@@ -38,17 +34,14 @@ class FileSystemModelLoader(IModelLoader):
         
         model_path = self._resolve_model_path(modality)
         if not model_path or not model_path.exists():
-            logger.warning(f"Model not found for modality: {modality}")
             return None
         
         try:
             raw_model = self._load_from_disk(model_path)
             adapted_model = SklearnModelAdapter(raw_model)
             self._model_cache[modality] = adapted_model
-            logger.info(f"Loaded model: {modality}")
             return adapted_model
-        except Exception as e:
-            logger.error(f"Failed to load model {modality}: {e}")
+        except Exception:
             return None
     
     def load_scaler(self, modality: str) -> Optional[IFeatureScaler]:
@@ -58,7 +51,6 @@ class FileSystemModelLoader(IModelLoader):
         
         scaler_path = self._models_dir / f'{modality}_scaler.joblib'
         if not scaler_path.exists():
-            logger.warning(f"Scaler not found for modality: {modality}")
             return None
         
         try:
@@ -66,8 +58,7 @@ class FileSystemModelLoader(IModelLoader):
             adapted_scaler = SklearnScalerAdapter(raw_scaler)
             self._scaler_cache[modality] = adapted_scaler
             return adapted_scaler
-        except Exception as e:
-            logger.error(f"Failed to load scaler {modality}: {e}")
+        except Exception:
             return None
     
     def _resolve_model_path(self, modality: str) -> Optional[Path]:

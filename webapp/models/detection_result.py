@@ -4,16 +4,12 @@ Documents still use fields ``prediction`` and ``prediction_label`` and live in t
 ``predictions`` collection so existing databases keep working.
 """
 
-import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
 
 from bson.objectid import ObjectId
 
 from webapp.db import get_db
-
-logger = logging.getLogger(__name__)
-
 
 def _predictions_collection():
     """Return the ``predictions`` collection and ensure indexes exist."""
@@ -51,12 +47,6 @@ def save_detection(user_id: str, result_data: Dict[str, Any]) -> Dict[str, Any]:
 
     result = _predictions_collection().insert_one(doc)
     doc["_id"] = result.inserted_id
-    logger.info(
-        "Detection saved for user %s: %s (%.2f%% confidence)",
-        user_id,
-        doc["prediction_label"],
-        doc["confidence"] * 100,
-    )
 
     doc["_id"] = str(doc["_id"])
     doc["user_id"] = str(doc["user_id"])
@@ -108,14 +98,14 @@ def search_detections(user_id: str, filters: Dict[str, Any]) -> List[Dict[str, A
             date_from = datetime.fromisoformat(filters["date_from"].replace("Z", "+00:00"))
             date_filter["$gte"] = date_from
         except (ValueError, AttributeError):
-            logger.warning("Invalid date_from format: %s", filters.get("date_from"))
+            pass
 
     if filters.get("date_to"):
         try:
             date_to = datetime.fromisoformat(filters["date_to"].replace("Z", "+00:00"))
             date_filter["$lte"] = date_to
         except (ValueError, AttributeError):
-            logger.warning("Invalid date_to format: %s", filters.get("date_to"))
+            pass
 
     if date_filter:
         query["created_at"] = date_filter

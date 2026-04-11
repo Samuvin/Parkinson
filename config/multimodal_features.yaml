@@ -1,5 +1,5 @@
 # Columns loaded from CSV for multimodal deep learning (train_dl.py, dl_models/data/dataset.py).
-# Paths are relative to data.raw_dir (e.g. data/raw).
+# Paths are relative to data.processed_dir (e.g. data/processed).
 
 label_column: status
 
@@ -33,15 +33,15 @@ speech_features:
   - PPE
 
 handwriting_features:
-  - mean_pressure
-  - pressure_variation
-  - mean_velocity
-  - velocity_variation
-  - mean_acceleration
-  - penup_time_ratio
-  - mean_stroke_length
-  - writing_tempo
   - tremor_power
+  - spiral_irregularity
+  - stroke_smoothness
+  - contour_complexity
+  - tremor_frequency
+  - pen_up_ratio
+  - mean_stroke_width
+  - drawing_speed_proxy
+  - line_waviness
   - fluency_score
 
 gait_features:

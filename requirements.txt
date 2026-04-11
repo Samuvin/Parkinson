@@ -14,6 +14,7 @@ soundfile>=0.12.0
 opencv-python-headless>=4.8.0
 scikit-image>=0.21.0
 Pillow>=10.0.0
+mediapipe>=0.10.0
 
 # Web Framework (Essential)
 flask>=2.3.0

@@ -1,276 +1,344 @@
 """
 Video processing for gait analysis in Parkinson's Disease prediction.
-Extracts 10 gait features from walking videos.
+Extracts 10 gait features from walking videos using MediaPipe Pose estimation.
 """
 
 import numpy as np
 import cv2
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional
 import warnings
 
 warnings.filterwarnings('ignore')
 
+try:
+    import mediapipe as mp
+    _MP_AVAILABLE = True
+    _mp_pose = mp.solutions.pose
+except (ImportError, AttributeError):
+    _MP_AVAILABLE = False
+    _mp_pose = None
+
+# Landmark indices in MediaPipe Pose (33-keypoint model)
+_LEFT_ANKLE = 27
+_RIGHT_ANKLE = 28
+_LEFT_HIP = 23
+_RIGHT_HIP = 24
+_LEFT_HEEL = 29
+_RIGHT_HEEL = 30
+
 
 def extract_gait_features(video_path: str) -> Dict[str, float]:
     """
-    Extract 10 gait features from walking video.
-    
-    Note: These are estimated features using basic motion detection.
-    Professional gait analysis requires force plates or motion capture systems.
-    
+    Extract 10 gait features from a walking video.
+
+    Uses MediaPipe Pose landmarks when available. Falls back to frame-
+    differencing motion analysis when MediaPipe is not installed.
+
     Args:
-        video_path: Path to video file
-        
+        video_path: Path to walking video file.
+
     Returns:
-        Dictionary with 10 gait features
+        Dictionary with 10 gait features whose keys match
+        ``config/multimodal_features.yaml`` ``gait_features``.
     """
+    if _MP_AVAILABLE:
+        return _extract_with_mediapipe(video_path)
+    return _extract_with_motion(video_path)
+
+
+# ---------------------------------------------------------------------------
+# MediaPipe pose-based extraction
+# ---------------------------------------------------------------------------
+
+def _extract_with_mediapipe(video_path: str) -> Dict[str, float]:
+    """Extract pose-based gait features using MediaPipe Pose."""
     cap = cv2.VideoCapture(video_path)
-    
     if not cap.isOpened():
-        # Raise exception if video cannot be opened
         raise RuntimeError(
             f"Failed to open video file '{video_path}'. "
-            f"Please ensure the file is a valid video format and is not corrupted."
+            "Please ensure the file is a valid video format."
         )
-    
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps == 0:
-        fps = 30  # Default
-    
-    # Collect motion data and additional video statistics
-    motion_data = []
-    prev_frame = None
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
+    left_ankle_y: List[float] = []
+    right_ankle_y: List[float] = []
+    hip_x: List[float] = []
     frame_count = 0
-    total_motion = 0
-    frame_intensities = []
-    
+
+    with _mp_pose.Pose(
+        static_image_mode=False,
+        model_complexity=1,
+        enable_segmentation=False,
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5,
+    ) as pose:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame_count += 1
+
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            result = pose.process(rgb)
+
+            if result.pose_landmarks:
+                lm = result.pose_landmarks.landmark
+                h, w = frame.shape[:2]
+
+                left_ankle_y.append(lm[_LEFT_ANKLE].y * h)
+                right_ankle_y.append(lm[_RIGHT_ANKLE].y * h)
+
+                mid_hip_x = (lm[_LEFT_HIP].x + lm[_RIGHT_HIP].x) / 2.0
+                hip_x.append(mid_hip_x * w)
+
+            if frame_count >= 600:
+                break
+
+    cap.release()
+
+    if len(left_ankle_y) < 20:
+        raise ValueError(
+            f"Insufficient pose data from '{video_path}'. "
+            f"Only {len(left_ankle_y)} frames with detected landmarks "
+            "(minimum 20 required). Ensure the full body is visible."
+        )
+
+    return _compute_pose_features(
+        np.array(left_ankle_y),
+        np.array(right_ankle_y),
+        np.array(hip_x),
+        fps,
+    )
+
+
+def _compute_pose_features(
+    la_y: np.ndarray,
+    ra_y: np.ndarray,
+    hip_x: np.ndarray,
+    fps: float,
+) -> Dict[str, float]:
+    """Compute 10 gait features from ankle/hip landmark time-series."""
+    feats: Dict[str, float] = {}
+
+    # --- Heel-strike detection (ankle Y local maxima — foot lowest = highest Y) ---
+    left_strikes = _find_peaks(la_y)
+    right_strikes = _find_peaks(ra_y)
+    all_strikes = sorted(left_strikes + right_strikes)
+
+    if len(all_strikes) >= 2:
+        intervals = np.diff(all_strikes) / fps  # seconds per step
+        stride_intervals = intervals[::2] * 2 if len(intervals) >= 2 else intervals
+        feats['stride_interval'] = float(np.mean(stride_intervals))
+        feats['stride_variability'] = float(np.std(stride_intervals))
+        feats['cadence'] = float(60.0 / feats['stride_interval']) if feats['stride_interval'] > 0 else 90.0
+    else:
+        feats['stride_interval'] = 1.1
+        feats['stride_variability'] = 0.08
+        feats['cadence'] = 90.0
+
+    # --- Swing / stance / double-support times ---
+    n = len(la_y)
+    threshold = np.percentile(la_y, 40)
+    left_stance = la_y >= threshold
+    right_stance = ra_y >= np.percentile(ra_y, 40)
+
+    n_left_swing = np.sum(~left_stance)
+    n_left_stance = np.sum(left_stance)
+    n_double = np.sum(left_stance & right_stance)
+    steps = max(len(all_strikes), 1)
+
+    feats['swing_time'] = float((n_left_swing / fps) / steps)
+    feats['stance_time'] = float((n_left_stance / fps) / steps)
+    feats['double_support_time'] = float((n_double / fps) / steps)
+
+    # --- Gait speed (hip displacement per second) ---
+    if len(hip_x) >= 2:
+        total_disp = float(np.sum(np.abs(np.diff(hip_x))))
+        duration = len(hip_x) / fps
+        feats['gait_speed'] = total_disp / duration / 100.0  # normalise to m/s proxy
+    else:
+        feats['gait_speed'] = 1.0
+
+    # --- Step length proxy (ankle horizontal distance at heel-strike) ---
+    if left_strikes and right_strikes:
+        paired = min(len(left_strikes), len(right_strikes))
+        step_lengths = []
+        for i in range(paired):
+            # Use Y difference as step length proxy (pixels, normalised)
+            diff = abs(la_y[left_strikes[i]] - ra_y[right_strikes[i]])
+            step_lengths.append(diff / 100.0)
+        feats['step_length'] = float(np.mean(step_lengths))
+    else:
+        feats['step_length'] = 0.6
+
+    # --- Stride regularity (autocorrelation of left ankle Y) ---
+    if len(la_y) >= 40:
+        norm = la_y - np.mean(la_y)
+        autocorr = np.correlate(norm, norm, mode='full')
+        autocorr = autocorr[len(autocorr) // 2:]
+        autocorr /= (autocorr[0] + 1e-10)
+        stride_lag = max(int(feats['stride_interval'] * fps), 1)
+        if stride_lag < len(autocorr):
+            feats['stride_regularity'] = float(np.clip(autocorr[stride_lag], 0.0, 1.0))
+        else:
+            feats['stride_regularity'] = 0.7
+    else:
+        feats['stride_regularity'] = 0.7
+
+    # --- Gait asymmetry (left vs right step time difference) ---
+    if len(left_strikes) >= 2 and len(right_strikes) >= 2:
+        left_step_t = float(np.mean(np.diff(left_strikes))) / fps
+        right_step_t = float(np.mean(np.diff(right_strikes))) / fps
+        total = left_step_t + right_step_t
+        feats['gait_asymmetry'] = abs(left_step_t - right_step_t) / (total + 1e-10)
+    else:
+        feats['gait_asymmetry'] = 0.05
+
+    return feats
+
+
+def _find_peaks(signal: np.ndarray, min_dist: int = 10) -> List[int]:
+    """Find local maxima in a 1-D signal with minimum separation."""
+    peaks = []
+    for i in range(1, len(signal) - 1):
+        if signal[i] >= signal[i - 1] and signal[i] >= signal[i + 1]:
+            if not peaks or (i - peaks[-1]) >= min_dist:
+                peaks.append(i)
+    return peaks
+
+
+# ---------------------------------------------------------------------------
+# Fallback: frame-differencing motion analysis
+# ---------------------------------------------------------------------------
+
+def _extract_with_motion(video_path: str) -> Dict[str, float]:
+    """Fallback gait extractor using frame-difference motion signals."""
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise RuntimeError(
+            f"Failed to open video file '{video_path}'. "
+            "Please ensure the file is a valid video format."
+        )
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    motion_data: List[float] = []
+    prev_frame: Optional[np.ndarray] = None
+    frame_count = 0
+    frame_intensities: List[float] = []
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        
         frame_count += 1
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (21, 21), 0)
-        
-        # Store frame intensity statistics
-        frame_intensities.append(np.mean(gray))
-        
+        gray = cv2.GaussianBlur(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (21, 21), 0)
+        frame_intensities.append(float(np.mean(gray)))
+
         if prev_frame is not None:
-            # Calculate frame difference (motion)
-            frame_diff = cv2.absdiff(prev_frame, gray)
-            _, thresh = cv2.threshold(frame_diff, 25, 255, cv2.THRESH_BINARY)
-            
-            # Calculate motion amount
-            motion_amount = np.sum(thresh) / (255 * thresh.size)
-            motion_data.append(motion_amount)
-            total_motion += motion_amount
-        
+            diff = cv2.absdiff(prev_frame, gray)
+            _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
+            motion_data.append(float(np.sum(thresh) / (255 * thresh.size)))
+
         prev_frame = gray
-        
-        # Limit processing to first 300 frames for performance
-        if frame_count > 300:
+        if frame_count >= 300:
             break
-    
+
     cap.release()
-    
+
     if len(motion_data) < 10:
         raise ValueError(
-            f"Insufficient motion data extracted from video '{video_path}'. "
-            f"Only {len(motion_data)} motion frames detected (minimum 10 required). "
-            f"Please ensure the video contains clear walking/gait movement."
+            f"Insufficient motion data from '{video_path}' "
+            f"({len(motion_data)} frames, minimum 10)."
         )
-    
-    # Extract features from motion data
-    features = calculate_gait_features(motion_data, fps, frame_count)
-    
-    # Add variation based on actual video content
-    if total_motion > 0:
-        # Adjust features based on motion intensity
-        motion_factor = total_motion / len(motion_data)
-        print(f"  Motion factor: {motion_factor:.4f}")
-        
-        if motion_factor < 0.01:  # Very low motion
-            features['gait_speed'] *= 0.7
-            features['cadence'] *= 0.85
-            features['stride_regularity'] *= 0.9
-            print(f"  Applied LOW motion adjustments")
-        elif motion_factor > 0.05:  # High motion
-            print(f"  HIGH motion detected")
-        
-        # Add variation based on brightness changes (can indicate tremor/unsteadiness)
-        if len(frame_intensities) > 1:
-            intensity_var = np.std(frame_intensities)
-            print(f"  Brightness variation: {intensity_var:.2f}")
-            if intensity_var > 20:  # High variation
-                features['stride_interval_std'] *= 1.3
-                features['gait_asymmetry'] = min(features['gait_asymmetry'] * 1.4, 0.4)
-                print(f"  Applied brightness variation adjustments")
-    
-    print(f"✓ Extracted gait features from {frame_count} frames ({len(motion_data)} motion samples)")
-    print(f"  Sample features: stride_interval={features['stride_interval']:.3f}, gait_speed={features['gait_speed']:.3f}, regularity={features['stride_regularity']:.3f}")
-    
-    return features
+
+    return _motion_features(motion_data, fps, frame_count, frame_intensities)
 
 
-def calculate_gait_features(motion_data: List[float], fps: float, frame_count: int) -> Dict[str, float]:
-    """Calculate gait features from motion data."""
-    motion_array = np.array(motion_data)
-    
-    features = {}
-    
-    # Calculate overall motion statistics for feature variation
-    mean_motion = np.mean(motion_array)
-    std_motion = np.std(motion_array)
-    max_motion = np.max(motion_array)
-    
-    # 1-2: Stride interval and variability
-    # Detect peaks in motion (steps)
-    steps = detect_steps(motion_array)
-    
+def _motion_features(
+    motion_data: List[float],
+    fps: float,
+    frame_count: int,
+    frame_intensities: List[float],
+) -> Dict[str, float]:
+    """Compute 10 gait features from frame-difference motion signal."""
+    arr = np.array(motion_data)
+    mean_m = float(np.mean(arr))
+    std_m = float(np.std(arr))
+    max_m = float(np.max(arr))
+
+    steps = _find_peaks(arr)
+
     if len(steps) > 1:
-        step_intervals = np.diff(steps) / fps  # Convert to seconds
-        # Add variation based on actual motion intensity
-        interval_base = np.mean(step_intervals) * 2  # 2 steps = 1 stride
-        # Scale based on motion characteristics
-        if mean_motion < 0.01:  # Low motion - slower gait
-            interval_base *= 1.2
-        elif mean_motion > 0.05:  # High motion - faster gait
-            interval_base *= 0.9
-        
-        features['stride_interval'] = float(interval_base)
-        features['stride_interval_std'] = float(np.std(step_intervals) * 2 * (1 + std_motion * 10))
+        step_ints = np.diff(steps) / fps
+        stride_int = float(np.mean(step_ints) * 2)
+        stride_var = float(np.std(step_ints) * 2)
     else:
-        # Fallback with variation based on motion
-        features['stride_interval'] = float(0.95 + mean_motion * 10)
-        features['stride_interval_std'] = float(0.04 + std_motion * 2)
-    
-    # 3-4: Swing and stance time estimates
-    # Swing time: low motion periods
-    # Stance time: high motion periods
-    motion_threshold = np.median(motion_array)
-    swing_frames = np.sum(motion_array < motion_threshold)
-    stance_frames = np.sum(motion_array >= motion_threshold)
-    
-    swing_time_base = (swing_frames / fps) / max(len(steps), 1) * 0.4
-    stance_time_base = (stance_frames / fps) / max(len(steps), 1) * 0.7
-    
-    # Adjust based on motion characteristics
-    features['swing_time'] = float(swing_time_base * (1 - mean_motion * 2))
-    features['stance_time'] = float(stance_time_base * (1 + mean_motion))
-    
-    # 5: Double support time estimate
-    features['double_support'] = float(features['stance_time'] * (0.3 + std_motion))
-    
-    # 6-7: Gait speed and cadence
-    duration = frame_count / fps
-    if duration > 0 and len(steps) > 0:
-        cadence = (len(steps) * 60) / duration  # Steps per minute
-        # Adjust cadence based on motion intensity
-        cadence_adjusted = cadence * (0.8 + mean_motion * 8)
-        features['cadence'] = float(min(max(cadence_adjusted, 70), 150))
-        
-        # Estimate speed (assuming average step length)
-        step_length = 0.5 + mean_motion * 3  # Vary step length with motion
-        features['gait_speed'] = float((len(steps) * step_length) / duration)
-    else:
-        features['cadence'] = float(90.0 + mean_motion * 400)
-        features['gait_speed'] = float(0.8 + mean_motion * 10)
-    
-    # 8: Step length estimate
-    if features['cadence'] > 0:
-        features['step_length'] = float(features['gait_speed'] / (features['cadence'] / 60))
-    else:
-        features['step_length'] = float(0.5 + mean_motion * 2)
-    
-    # 9: Stride regularity (from motion consistency)
-    regularity = 1.0 - (std_motion / (mean_motion + 1e-10))
-    # Make it more sensitive to variations
-    regularity_scaled = np.clip(regularity, 0.4, 0.98)
-    features['stride_regularity'] = float(regularity_scaled)
-    
-    # 10: Gait asymmetry (from motion pattern)
-    # Analyze first half vs second half of motion
-    mid_point = len(motion_array) // 2
-    first_half_mean = np.mean(motion_array[:mid_point])
-    second_half_mean = np.mean(motion_array[mid_point:])
-    asymmetry = abs(first_half_mean - second_half_mean) / (first_half_mean + second_half_mean + 1e-10)
-    # Make asymmetry more pronounced
-    asymmetry_scaled = asymmetry * (1 + max_motion * 5)
-    features['gait_asymmetry'] = float(np.clip(asymmetry_scaled, 0.05, 0.35))
-    
-    return features
+        stride_int = 0.95 + mean_m * 10
+        stride_var = 0.04 + std_m * 2
+
+    threshold = float(np.median(arr))
+    swing_frames = int(np.sum(arr < threshold))
+    stance_frames = int(np.sum(arr >= threshold))
+
+    feats: Dict[str, float] = {
+        'stride_interval': stride_int,
+        'stride_variability': stride_var,
+        'swing_time': float(swing_frames / fps / max(len(steps), 1) * 0.4),
+        'stance_time': float(stance_frames / fps / max(len(steps), 1) * 0.7),
+        'double_support_time': float(stance_frames / fps / max(len(steps), 1) * 0.7 * (0.3 + std_m)),
+        'gait_speed': float(len(steps) * (0.5 + mean_m * 3) / (frame_count / fps))
+        if frame_count > 0 else 1.0,
+        'cadence': float(min(max(len(steps) * 60 / (frame_count / fps) * (0.8 + mean_m * 8), 70), 150))
+        if frame_count > 0 else 90.0,
+        'step_length': 0.0,
+        'stride_regularity': float(np.clip(1.0 - std_m / (mean_m + 1e-10), 0.4, 0.98)),
+        'gait_asymmetry': 0.0,
+    }
+
+    if feats['cadence'] > 0:
+        feats['step_length'] = feats['gait_speed'] / (feats['cadence'] / 60.0)
+
+    mid = len(arr) // 2
+    asym = abs(np.mean(arr[:mid]) - np.mean(arr[mid:])) / (np.mean(arr) + 1e-10)
+    feats['gait_asymmetry'] = float(np.clip(asym * (1 + max_m * 5), 0.05, 0.35))
+
+    # Adjust for brightness variation (lighting flicker can indicate tremor)
+    if len(frame_intensities) > 1 and np.std(frame_intensities) > 20:
+        feats['stride_variability'] = min(feats['stride_variability'] * 1.3, 0.5)
+        feats['gait_asymmetry'] = min(feats['gait_asymmetry'] * 1.4, 0.4)
+
+    return feats
 
 
-def detect_steps(motion_data: np.ndarray, min_distance: int = 15) -> List[int]:
-    """
-    Detect steps from motion data by finding peaks.
-    
-    Args:
-        motion_data: Array of motion amounts per frame
-        min_distance: Minimum frames between steps
-        
-    Returns:
-        List of frame indices where steps occur
-    """
-    # Smooth the data
-    if len(motion_data) > 5:
-        smoothed = np.convolve(motion_data, np.ones(5)/5, mode='same')
-    else:
-        smoothed = motion_data
-    
-    # Find peaks (local maxima)
-    peaks = []
-    for i in range(1, len(smoothed) - 1):
-        if smoothed[i] > smoothed[i-1] and smoothed[i] > smoothed[i+1]:
-            # Check if it's above threshold
-            if smoothed[i] > np.mean(smoothed) * 0.8:
-                peaks.append(i)
-    
-    # Filter peaks that are too close together
-    if len(peaks) < 2:
-        return peaks
-    
-    filtered_peaks = [peaks[0]]
-    for peak in peaks[1:]:
-        if peak - filtered_peaks[-1] >= min_distance:
-            filtered_peaks.append(peak)
-    
-    return filtered_peaks
-
-
-
-
-
+# ---------------------------------------------------------------------------
+# Public helpers
+# ---------------------------------------------------------------------------
 
 def get_feature_names() -> List[str]:
-    """Get list of all 10 gait feature names in order."""
+    """Return the 10 gait feature names in training-column order."""
     return [
         'stride_interval',
-        'stride_interval_std',
+        'stride_variability',
         'swing_time',
         'stance_time',
-        'double_support',
+        'double_support_time',
         'gait_speed',
         'cadence',
         'step_length',
         'stride_regularity',
-        'gait_asymmetry'
+        'gait_asymmetry',
     ]
 
 
 def features_dict_to_array(features: Dict[str, float]) -> List[float]:
-    """Convert features dictionary to ordered array."""
-    feature_names = get_feature_names()
-    return [features[name] for name in feature_names]
+    """Convert a features dict to a list ordered by ``get_feature_names()``."""
+    return [features[name] for name in get_feature_names()]
 
 
 if __name__ == "__main__":
-    print("Gait Video Feature Extractor")
-    print("10 features for Parkinson's Disease prediction")
-    print("\nFeature list:")
+    backend = "MediaPipe Pose" if _MP_AVAILABLE else "frame-differencing (install mediapipe for better accuracy)"
+    print(f"Gait Feature Extractor — backend: {backend}")
+    print("\n10 gait features (match config/multimodal_features.yaml):")
     for i, name in enumerate(get_feature_names(), 1):
-        print(f"  {i}. {name}")
-    print("\nNote: Features are estimated from video analysis.")
-    print("For best accuracy, use professional gait analysis equipment.")
-
+        print(f"  {i:2d}. {name}")

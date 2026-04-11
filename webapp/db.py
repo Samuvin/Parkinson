@@ -1,13 +1,10 @@
 """MongoDB connection helper for the application."""
 
 import os
-import logging
 
 import certifi
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
-
-logger = logging.getLogger(__name__)
 
 _client = None
 _db = None
@@ -46,7 +43,6 @@ def get_db():
         # Verify that the server is reachable.
         _client.admin.command("ping")
         _db = _client[db_name]
-        logger.info("Connected to MongoDB database '%s'", db_name)
         return _db
     except ConnectionFailure as exc:
         _client = None
@@ -64,4 +60,3 @@ def close_db():
         _client.close()
         _client = None
         _db = None
-        logger.info("MongoDB connection closed")

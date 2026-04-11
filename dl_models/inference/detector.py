@@ -10,7 +10,6 @@ plus explainability (attention, SE weights, scaled-input magnitude bars).
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any, Optional
 
@@ -24,8 +23,6 @@ from dl_models.data.dataset import (
     SPEECH_FEATURE_NAMES,
 )
 from dl_models.algorithm.networks import MultimodalPDNet
-
-logger = logging.getLogger(__name__)
 
 
 def _feature_importance_from_scaled_inputs(
@@ -118,20 +115,15 @@ class DLDetector:
         self.model.load_state_dict(state)
         self.model.to(self.device)
         self.model.eval()
-        logger.info("DL model loaded from %s (device=%s)", model_path, self.device)
 
         # Load scalers
         if scalers_path.is_file():
             self.scalers = joblib.load(scalers_path)
-            logger.info("Scalers loaded from %s", scalers_path)
-        else:
-            logger.warning("Scalers not found at %s -- raw features will be used.", scalers_path)
 
         # Load metrics
         if metrics_path.is_file():
             with open(metrics_path) as f:
                 self.metrics = json.load(f)
-            logger.info("Metrics loaded from %s", metrics_path)
 
     # -- detection --------------------------------------------------- #
 

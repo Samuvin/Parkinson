@@ -15,10 +15,8 @@ import soundfile as sf
 from typing import Dict, List, Tuple
 import warnings
 import os
-import logging
 
 warnings.filterwarnings('ignore')
-logger = logging.getLogger(__name__)
 
 
 def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
@@ -58,7 +56,6 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
                 y = y / np.max(np.abs(y))
     except Exception as e:
         error_msg = f"Error loading audio with soundfile: {e}"
-        logger.warning(error_msg)
         # Try librosa with soundfile backend explicitly (still may fallback, but try)
         try:
             # Set librosa to prefer soundfile, fail fast if not supported
@@ -89,7 +86,6 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
     try:
         sound = parselmouth.Sound(audio_file_path)
     except Exception as e:
-        logger.warning("Praat could not load '%s' directly: %s. Trying temp-WAV fallback.", audio_file_path, e)
         try:
             import tempfile
             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
@@ -97,14 +93,8 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
                 tmp_wav = tmp.name
             sound = parselmouth.Sound(tmp_wav)
             os.unlink(tmp_wav)
-        except Exception as e2:
-            # Praat is entirely unavailable for this file; continue with default
-            # values for Praat-derived features rather than failing the request.
-            logger.warning(
-                "Praat unavailable for '%s' (direct error: %s; temp-WAV error: %s). "
-                "Praat-derived features will use safe defaults.",
-                audio_file_path, e, e2,
-            )
+        except Exception:
+            pass
     
     # Extract features
     features = {}
@@ -138,7 +128,6 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
             features['MDVP:Fhi(Hz)'] = 160.0
             features['MDVP:Flo(Hz)'] = 80.0
     except Exception as e:
-        logger.warning("Pitch extraction failed for '%s': %s. Using default values.", audio_file_path, e)
         features['MDVP:Fo(Hz)'] = 120.0
         features['MDVP:Fhi(Hz)'] = 160.0
         features['MDVP:Flo(Hz)'] = 80.0
@@ -162,7 +151,6 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
         features['MDVP:PPQ'] = float(jitter_ppq5)
         features['Jitter:DDP'] = float(jitter_ddp)
     except Exception as e:
-        logger.warning("Jitter extraction failed for '%s': %s. Using default values.", audio_file_path, e)
         features['MDVP:Jitter(%)'] = 0.005
         features['MDVP:Jitter(Abs)'] = 0.00005
         features['MDVP:RAP'] = 0.003
@@ -187,7 +175,6 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
         features['MDVP:APQ'] = float(shimmer_apq11)
         features['Shimmer:DDA'] = float(shimmer_dda)
     except Exception as e:
-        logger.warning("Shimmer extraction failed for '%s': %s. Using default values.", audio_file_path, e)
         features['MDVP:Shimmer'] = 0.03
         features['MDVP:Shimmer(dB)'] = 0.3
         features['Shimmer:APQ3'] = 0.015
@@ -206,7 +193,6 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
         features['NHR'] = float(abs(nhr) * 0.01)  # Scale to match dataset range
         features['HNR'] = float(hnr)
     except Exception as e:
-        logger.warning("HNR extraction failed for '%s': %s. Using default values.", audio_file_path, e)
         features['NHR'] = 0.02
         features['HNR'] = 20.0
     
@@ -233,7 +219,6 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
         # PPE - Pitch Period Entropy
         features['PPE'] = safe_float(estimate_entropy(f0_values), 0.2)
     except Exception as e:
-        logger.warning("Nonlinear features extraction failed for '%s': %s. Using default values.", audio_file_path, e)
         features['RPDE'] = 0.5
         features['DFA'] = 0.7
         features['spread1'] = -5.0
@@ -241,18 +226,10 @@ def extract_speech_features(audio_file_path: str) -> Dict[str, float]:
         features['D2'] = 2.5
         features['PPE'] = 0.2
     
-    # Replace any remaining NaN/Inf values with 0 and log warnings
-    nan_features = []
+    # Replace any remaining NaN/Inf values with 0
     for name, value in features.items():
         if np.isnan(value) or np.isinf(value):
-            nan_features.append(name)
             features[name] = 0.0
-    
-    if nan_features:
-        logger.warning(
-            f"Found NaN/Inf values in features {', '.join(nan_features)} for '{audio_file_path}'. "
-            f"Replaced with 0.0"
-        )
     
     return features
 

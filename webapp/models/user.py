@@ -1,6 +1,5 @@
 """User model operations for MongoDB."""
 
-import logging
 from datetime import datetime, timezone
 
 import bcrypt
@@ -8,9 +7,6 @@ from bson.objectid import ObjectId
 from pymongo.errors import DuplicateKeyError
 
 from webapp.db import get_db
-
-logger = logging.getLogger(__name__)
-
 
 def _users_collection():
     """Return the ``users`` collection and ensure indexes exist."""
@@ -49,7 +45,6 @@ def create_user(email, password):
     try:
         result = _users_collection().insert_one(user_doc)
         user_doc["_id"] = result.inserted_id
-        logger.info("User created: %s", email)
     except DuplicateKeyError:
         raise ValueError(f"A user with email '{email}' already exists")
 

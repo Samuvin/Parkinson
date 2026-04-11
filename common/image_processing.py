@@ -1,219 +1,364 @@
 """
 Handwriting image processing for Parkinson's Disease prediction.
-Extracts 10 handwriting features from images of handwriting/drawings.
+Extracts 10 image-based features from spiral or word drawings.
+
+Feature names are aligned with ``config/multimodal_features.yaml``
+``handwriting_features`` and with the training CSV column names.
 """
 
 import numpy as np
 import cv2
 from PIL import Image
-from scipy import ndimage, fft
-from skimage import filters, morphology, measure
+from scipy import ndimage, fft as sp_fft
+from skimage import morphology, filters
 from typing import Dict, List
 import warnings
 
 warnings.filterwarnings('ignore')
 
+# Ideal Archimedean spiral centre and growth constant used for tremor_power.
+# These are normalised to the image size at extraction time.
+_SPIRAL_TURNS = 3
+
 
 def extract_handwriting_features(image_path: str) -> Dict[str, float]:
     """
-    Extract 10 handwriting features from image using real-time image analysis.
-    
-    Note: These are estimated features from static images.
-    Real handwriting analysis requires time-series pen data from digitizers.
-    
+    Extract 10 image-based handwriting features from a spiral/word drawing.
+
     Args:
-        image_path: Path to handwriting image
-        
+        image_path: Path to PNG/JPEG image of a handwriting sample.
+
     Returns:
-        Dictionary with 10 handwriting features extracted from the actual image
+        Dictionary with 10 features whose keys match
+        ``config/multimodal_features.yaml`` ``handwriting_features``.
     """
-    # Load and preprocess image
     img = cv2.imread(image_path)
     if img is None:
-        # Try with PIL
-        img = np.array(Image.open(image_path))
-    
-    # Convert to grayscale
+        img = np.array(Image.open(image_path).convert('RGB'))
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
     if len(img.shape) == 3:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     else:
-        gray = img
-    
-    # Threshold to binary
+        gray = img.copy()
+
+    # Binarise: ink = 255 (dark strokes on light background)
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    
-    features = {}
-    
-    # 1-2: Pressure estimates (from stroke thickness)
-    stroke_widths = estimate_stroke_widths(binary)
-    features['mean_pressure'] = float(np.mean(stroke_widths) / 10.0)  # Normalize
-    features['std_pressure'] = float(np.std(stroke_widths) / 10.0)
-    
-    # 3-4: Velocity estimates (from stroke smoothness)
-    smoothness = estimate_smoothness(binary)
-    features['mean_velocity'] = float(2.0 + smoothness)  # Estimated m/s
-    features['std_velocity'] = float(0.5 + smoothness * 0.5)
-    
-    # 5: Acceleration estimate
-    features['mean_acceleration'] = float(1.0 + smoothness * 0.5)
-    
-    # 6: Pen-up time estimate (from gaps)
-    pen_up_ratio = estimate_pen_up_time(binary)
-    features['pen_up_time'] = float(pen_up_ratio * 0.5)
-    
-    # 7: Stroke length
-    total_stroke = np.sum(binary > 0)
-    features['stroke_length'] = float(total_stroke / 1000.0)  # Normalize
-    
-    # 8: Writing tempo
-    features['writing_tempo'] = float(1.5 - pen_up_ratio * 0.5)
-    
-    # 9: Tremor frequency (from stroke irregularity)
-    tremor = estimate_tremor(binary)
-    features['tremor_frequency'] = float(5.0 + tremor * 3.0)  # Hz
-    
-    # 10: Fluency score
-    fluency = estimate_fluency(binary, smoothness, tremor)
-    features['fluency_score'] = float(fluency)
-    
-    return features
+
+    feats: Dict[str, float] = {}
+
+    skeleton = morphology.skeletonize(binary > 0).astype(np.uint8) * 255
+
+    # 1. tremor_power — FFT peak amplitude of perpendicular deviation from
+    #    the ideal spiral path
+    feats['tremor_power'] = _tremor_power(binary)
+
+    # 2. spiral_irregularity — variance of inter-ring gap distances
+    feats['spiral_irregularity'] = _spiral_irregularity(binary)
+
+    # 3. stroke_smoothness — mean absolute curvature of the skeletonised
+    #    contour (lower = smoother)
+    feats['stroke_smoothness'] = _stroke_smoothness(skeleton)
+
+    # 4. contour_complexity — isoperimetric quotient of the ink region
+    #    (perimeter² / area); higher = more complex / irregular
+    feats['contour_complexity'] = _contour_complexity(binary)
+
+    # 5. tremor_frequency — dominant radial-oscillation frequency (Hz proxy)
+    feats['tremor_frequency'] = _tremor_frequency(binary)
+
+    # 6. pen_up_ratio — fraction of the bounding-box area with no ink
+    feats['pen_up_ratio'] = _pen_up_ratio(binary)
+
+    # 7. mean_stroke_width — mean distance-transform value on ink pixels
+    #    (stroke thickness proxy)
+    feats['mean_stroke_width'] = _mean_stroke_width(binary)
+
+    # 8. drawing_speed_proxy — total ink arc length / bounding-box diagonal
+    feats['drawing_speed_proxy'] = _drawing_speed_proxy(skeleton)
+
+    # 9. line_waviness — RMS perpendicular deviation of each stroke segment
+    #    from its principal axis
+    feats['line_waviness'] = _line_waviness(skeleton)
+
+    # 10. fluency_score — composite: smoothness × (1 − tremor) × coverage
+    feats['fluency_score'] = _fluency_score(
+        feats['stroke_smoothness'],
+        feats['tremor_power'],
+        binary,
+    )
+
+    return feats
 
 
-def estimate_stroke_widths(binary_img: np.ndarray) -> np.ndarray:
-    """Estimate stroke widths from binary image."""
-    # Distance transform to get stroke widths
-    dist_transform = ndimage.distance_transform_edt(binary_img)
-    stroke_pixels = binary_img > 0
-    
-    if np.sum(stroke_pixels) == 0:
-        return np.array([5.0])
-    
-    widths = dist_transform[stroke_pixels] * 2  # Diameter
-    return widths[widths > 0]
+# ---------------------------------------------------------------------------
+# Individual feature functions
+# ---------------------------------------------------------------------------
+
+def _tremor_power(binary: np.ndarray) -> float:
+    """
+    FFT peak amplitude of radial deviations from an ideal Archimedean spiral.
+
+    Fits the skeleton to a spiral path by centre-of-mass, converts to polar
+    coordinates, and measures the FFT peak of the residual radius signal.
+    """
+    ys, xs = np.where(binary > 0)
+    if len(xs) < 30:
+        return 0.5
+
+    cx, cy = float(np.mean(xs)), float(np.mean(ys))
+    r = np.sqrt((xs - cx) ** 2 + (ys - cy) ** 2)
+
+    if r.max() < 1:
+        return 0.5
+
+    r_norm = r / r.max()
+    # Sort by angle to get a pseudo-time signal
+    angles = np.arctan2(ys - cy, xs - cx)
+    order = np.argsort(angles)
+    r_sorted = r_norm[order]
+
+    # Fit a linear trend (expanding spiral) and take residuals
+    x_idx = np.arange(len(r_sorted))
+    if len(x_idx) > 1:
+        coeffs = np.polyfit(x_idx, r_sorted, 1)
+        residuals = r_sorted - np.polyval(coeffs, x_idx)
+    else:
+        residuals = r_sorted - np.mean(r_sorted)
+
+    spectrum = np.abs(sp_fft.rfft(residuals))
+    peak = float(np.max(spectrum[1:])) / (len(residuals) + 1e-10)
+    return float(np.clip(peak, 0.0, 1.0))
 
 
-def estimate_smoothness(binary_img: np.ndarray) -> float:
-    """Estimate writing smoothness from contour analysis."""
-    contours, _ = cv2.findContours(binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    
+def _spiral_irregularity(binary: np.ndarray) -> float:
+    """
+    Variance of inter-ring gap distances estimated by radial distance histogram.
+    """
+    ys, xs = np.where(binary > 0)
+    if len(xs) < 30:
+        return 0.3
+
+    cx, cy = float(np.mean(xs)), float(np.mean(ys))
+    r = np.sqrt((xs - cx) ** 2 + (ys - cy) ** 2)
+
+    if r.max() < 1:
+        return 0.3
+
+    # Histogram of radii — peaks correspond to rings; variance of spacing
+    hist, edges = np.histogram(r, bins=max(20, len(r) // 50))
+    ring_gaps = np.diff(edges[np.where(hist > np.mean(hist))[0]])
+    if len(ring_gaps) < 2:
+        return 0.3
+
+    return float(np.clip(np.std(ring_gaps) / (np.mean(ring_gaps) + 1e-10), 0.0, 2.0))
+
+
+def _stroke_smoothness(skeleton: np.ndarray) -> float:
+    """
+    Mean absolute curvature of the skeletonised contour.
+
+    Lower values → smoother strokes (healthy); higher → more curvature (PD).
+    """
+    contours, _ = cv2.findContours(skeleton, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     if not contours:
         return 0.5
-    
-    # Analyze largest contour
-    largest_contour = max(contours, key=cv2.contourArea)
-    
-    if len(largest_contour) < 10:
+
+    curvatures = []
+    for cnt in contours:
+        pts = cnt.reshape(-1, 2).astype(float)
+        if len(pts) < 5:
+            continue
+        for i in range(1, len(pts) - 1):
+            v1 = pts[i] - pts[i - 1]
+            v2 = pts[i + 1] - pts[i]
+            angle = abs(np.arctan2(
+                v1[0] * v2[1] - v1[1] * v2[0],
+                v1[0] * v2[0] + v1[1] * v2[1],
+            ))
+            curvatures.append(angle)
+
+    if not curvatures:
         return 0.5
-    
-    # Calculate curvature changes
-    contour_points = largest_contour.reshape(-1, 2)
-    
-    # Calculate angles between consecutive segments
-    angles = []
-    for i in range(1, len(contour_points) - 1):
-        v1 = contour_points[i] - contour_points[i-1]
-        v2 = contour_points[i+1] - contour_points[i]
-        
-        angle = np.arctan2(v2[1], v2[0]) - np.arctan2(v1[1], v1[0])
-        angles.append(abs(angle))
-    
-    if angles:
-        smoothness = 1.0 - (np.mean(angles) / np.pi)
-        return float(np.clip(smoothness, 0, 1))
-    
-    return 0.5
+
+    return float(np.clip(np.mean(curvatures) / np.pi, 0.0, 1.0))
 
 
-def estimate_pen_up_time(binary_img: np.ndarray) -> float:
-    """Estimate pen-up time ratio from gaps in writing."""
-    # Dilate to connect nearby strokes
-    kernel = np.ones((5, 5), np.uint8)
-    dilated = cv2.dilate(binary_img, kernel, iterations=1)
-    
-    # Find connected components
-    num_labels, labels = cv2.connectedComponents(dilated)
-    
-    # More components = more pen lifts
-    if num_labels < 2:
-        return 0.1
-    
-    # Estimate ratio based on number of components
-    pen_up_ratio = min((num_labels - 1) * 0.1, 0.8)
-    return float(pen_up_ratio)
+def _contour_complexity(binary: np.ndarray) -> float:
+    """
+    Isoperimetric quotient: perimeter² / (4π × area).
+
+    Circle = 1.0; more complex / irregular shapes > 1.0.
+    """
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return 1.0
+
+    total_area = sum(cv2.contourArea(c) for c in contours)
+    total_perim = sum(cv2.arcLength(c, closed=False) for c in contours)
+
+    if total_area < 1:
+        return 1.0
+
+    iq = (total_perim ** 2) / (4 * np.pi * total_area + 1e-10)
+    return float(np.clip(iq, 1.0, 20.0))
 
 
-def estimate_tremor(binary_img: np.ndarray) -> float:
-    """Estimate tremor from stroke irregularity using frequency analysis."""
-    # Get skeleton of strokes
-    skeleton = morphology.skeletonize(binary_img > 0)
-    
-    if np.sum(skeleton) == 0:
+def _tremor_frequency(binary: np.ndarray) -> float:
+    """
+    Dominant frequency of the radial-oscillation signal (arbitrary Hz proxy).
+
+    Computed as the argmax bin of the radial-signal FFT divided by signal
+    length, scaled to a 0–15 Hz-equivalent range.
+    """
+    ys, xs = np.where(binary > 0)
+    if len(xs) < 30:
+        return 5.0
+
+    cx, cy = float(np.mean(xs)), float(np.mean(ys))
+    angles = np.arctan2(ys - cy, xs - cx)
+    r = np.sqrt((xs - cx) ** 2 + (ys - cy) ** 2)
+
+    order = np.argsort(angles)
+    r_signal = r[order] / (r.max() + 1e-10)
+
+    spectrum = np.abs(sp_fft.rfft(r_signal))
+    if len(spectrum) < 2:
+        return 5.0
+
+    dominant_bin = int(np.argmax(spectrum[1:]) + 1)
+    freq_hz = dominant_bin / len(r_signal) * 15.0  # map to 0-15 Hz range
+    return float(np.clip(freq_hz, 0.0, 15.0))
+
+
+def _pen_up_ratio(binary: np.ndarray) -> float:
+    """
+    Fraction of the ink bounding box that contains no ink (gap ratio).
+    """
+    ys, xs = np.where(binary > 0)
+    if len(xs) == 0:
+        return 1.0
+
+    y0, y1 = int(ys.min()), int(ys.max())
+    x0, x1 = int(xs.min()), int(xs.max())
+    bbox_area = max((y1 - y0 + 1) * (x1 - x0 + 1), 1)
+    ink_pixels = int(np.sum(binary[y0:y1 + 1, x0:x1 + 1] > 0))
+    return float(np.clip(1.0 - ink_pixels / bbox_area, 0.0, 1.0))
+
+
+def _mean_stroke_width(binary: np.ndarray) -> float:
+    """Mean stroke width via distance transform on ink pixels (pixels)."""
+    dist = ndimage.distance_transform_edt(binary)
+    ink = binary > 0
+    if not np.any(ink):
+        return 1.0
+
+    widths = dist[ink] * 2.0  # diameter = 2 × inradius
+    return float(np.mean(widths[widths > 0]) if np.any(widths > 0) else 1.0)
+
+
+def _drawing_speed_proxy(skeleton: np.ndarray) -> float:
+    """
+    Total skeleton arc length divided by the bounding-box diagonal.
+
+    Longer strokes relative to the drawing area proxy for higher speed.
+    """
+    ys, xs = np.where(skeleton > 0)
+    arc_len = float(len(xs))  # skeleton pixel count ≈ arc length
+
+    if arc_len == 0:
+        return 0.5
+
+    h, w = skeleton.shape
+    diagonal = np.sqrt(h ** 2 + w ** 2) + 1e-10
+    return float(np.clip(arc_len / diagonal, 0.0, 10.0))
+
+
+def _line_waviness(skeleton: np.ndarray) -> float:
+    """
+    RMS perpendicular deviation of skeleton pixels from their principal axis.
+
+    Computed per connected segment; averaged across all segments.
+    """
+    num_labels, labels = cv2.connectedComponents(skeleton)
+    waviness_scores = []
+
+    for label_id in range(1, num_labels):
+        ys, xs = np.where(labels == label_id)
+        if len(xs) < 5:
+            continue
+
+        pts = np.column_stack([xs.astype(float), ys.astype(float)])
+        mean_pt = pts.mean(axis=0)
+        centred = pts - mean_pt
+
+        # PCA: principal axis from SVD
+        _, _, vt = np.linalg.svd(centred, full_matrices=False)
+        axis = vt[0]
+
+        # Perpendicular distance from each point to the principal axis
+        perp = centred - (centred @ axis)[:, None] * axis
+        rms_dev = float(np.sqrt(np.mean(np.sum(perp ** 2, axis=1))))
+        waviness_scores.append(rms_dev)
+
+    if not waviness_scores:
         return 0.3
-    
-    # Find main stroke direction
-    y_coords, x_coords = np.where(skeleton)
-    
-    if len(y_coords) < 10:
-        return 0.3
-    
-    # Calculate perpendicular deviations
-    # Fit line to stroke
-    if len(x_coords) > 1:
-        coeffs = np.polyfit(x_coords, y_coords, 1)
-        fitted_y = np.polyval(coeffs, x_coords)
-        deviations = np.abs(y_coords - fitted_y)
-        
-        # High standard deviation = more tremor
-        tremor_score = np.std(deviations) / 10.0
-        return float(np.clip(tremor_score, 0, 1))
-    
-    return 0.3
+
+    return float(np.clip(np.mean(waviness_scores) / 10.0, 0.0, 1.0))
 
 
-def estimate_fluency(binary_img: np.ndarray, smoothness: float, tremor: float) -> float:
-    """Estimate writing fluency score."""
-    # Combine smoothness and tremor
-    # High smoothness, low tremor = high fluency
-    fluency = (smoothness * 0.6 + (1 - tremor) * 0.4)
-    
-    # Adjust based on stroke continuity
-    contours, _ = cv2.findContours(binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    if contours:
-        # More continuous strokes = better fluency
-        avg_contour_length = np.mean([len(c) for c in contours])
-        if avg_contour_length > 100:
-            fluency += 0.1
-    
-    return float(np.clip(fluency, 0, 1))
+def _fluency_score(
+    stroke_smoothness: float,
+    tremor_power: float,
+    binary: np.ndarray,
+) -> float:
+    """
+    Composite fluency: smoothness × (1 − tremor) × coverage_ratio.
 
+    coverage_ratio = ink pixels / bounding-box area.
+    """
+    ys, xs = np.where(binary > 0)
+    if len(xs) == 0:
+        return 0.0
+
+    y0, y1 = int(ys.min()), int(ys.max())
+    x0, x1 = int(xs.min()), int(xs.max())
+    bbox_area = max((y1 - y0 + 1) * (x1 - x0 + 1), 1)
+    coverage = float(np.sum(binary > 0)) / bbox_area
+
+    # stroke_smoothness is already 0–1 (lower = smoother), so invert it
+    smoothness_score = 1.0 - float(stroke_smoothness)
+    fluency = smoothness_score * (1.0 - float(tremor_power)) * float(coverage)
+    return float(np.clip(fluency, 0.0, 1.0))
+
+
+# ---------------------------------------------------------------------------
+# Public helpers
+# ---------------------------------------------------------------------------
 
 def get_feature_names() -> List[str]:
-    """Get list of all 10 handwriting feature names in order."""
+    """Return the 10 handwriting feature names in training-column order."""
     return [
-        'mean_pressure', 'std_pressure',
-        'mean_velocity', 'std_velocity',
-        'mean_acceleration',
-        'pen_up_time',
-        'stroke_length',
-        'writing_tempo',
+        'tremor_power',
+        'spiral_irregularity',
+        'stroke_smoothness',
+        'contour_complexity',
         'tremor_frequency',
-        'fluency_score'
+        'pen_up_ratio',
+        'mean_stroke_width',
+        'drawing_speed_proxy',
+        'line_waviness',
+        'fluency_score',
     ]
 
 
 def features_dict_to_array(features: Dict[str, float]) -> List[float]:
-    """Convert features dictionary to ordered array."""
-    feature_names = get_feature_names()
-    return [features[name] for name in feature_names]
+    """Convert a features dict to a list ordered by ``get_feature_names()``."""
+    return [features[name] for name in get_feature_names()]
 
 
 if __name__ == "__main__":
-    print("Handwriting Feature Extractor")
-    print("10 features for Parkinson's Disease prediction")
-    print("\nFeature list:")
+    print("Handwriting Feature Extractor (image-based)")
+    print("\n10 features (match config/multimodal_features.yaml):")
     for i, name in enumerate(get_feature_names(), 1):
-        print(f"  {i}. {name}")
-    print("\nNote: Features are estimated from static images.")
-    print("For best accuracy, use digitizer pen data with time-series information.")
-
+        print(f"  {i:2d}. {name}")

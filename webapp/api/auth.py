@@ -2,7 +2,6 @@
 
 import os
 import re
-import logging
 from datetime import datetime, timezone, timedelta
 
 import jwt
@@ -13,8 +12,6 @@ from webapp.models.user import (
     find_user_by_email,
     verify_password,
 )
-
-logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -95,7 +92,6 @@ def register():
     except ValueError as exc:
         return jsonify({"success": False, "error": str(exc)}), 409
 
-    logger.info("New user registered: %s", email)
     return jsonify({"success": True, "user": user}), 201
 
 
@@ -131,7 +127,6 @@ def login():
 
     token = _generate_token(user_doc["_id"], user_doc["email"])
 
-    logger.info("User logged in: %s", email)
     return jsonify({
         "success": True,
         "access_token": token,

@@ -51,7 +51,6 @@ python wsgi.py             # http://0.0.0.0:8000 by default (PORT env overrides)
 - **Train multimodal DL:** [`train_dl.py`](train_dl.py) — CSV paths and feature column names come from [`config/multimodal_features.yaml`](config/multimodal_features.yaml) (referenced by [`config/project.yaml`](config/project.yaml)).
 - **Aligned CSVs:** under `data/raw/speech/`, `data/raw/handwriting/`, `data/raw/gait/`. Loaders truncate to the **minimum row count** across modalities and use **speech** for labels when training that path; see [`dl_models/data/dataset.py`](dl_models/data/dataset.py).
 - **Refresh speech CSVs:** `bash data/raw/speech/download_speech_csvs.sh` or `python scripts/train_voice_pipeline.py --download-speech`.
-- **Jupyter staff demo:** [`notebooks/parkinson_multimodal_staff_demo.ipynb`](notebooks/parkinson_multimodal_staff_demo.ipynb) — see [`notebooks/README.md`](notebooks/README.md).
 
 ### Config → data → train → view model scores
 

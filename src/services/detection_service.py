@@ -4,7 +4,6 @@ Follows Dependency Inversion Principle — depends on abstractions, not concreti
 """
 
 import numpy as np
-import logging
 from typing import Dict, List, Optional, Any
 from src.core.interfaces import (
     IDetectionService,
@@ -16,9 +15,6 @@ from src.core.entities import (
     EnsemblePredictionResult,
     FeatureVector
 )
-
-logger = logging.getLogger(__name__)
-
 
 class MultiModalDetectionService(IDetectionService):
     """
@@ -98,8 +94,8 @@ class MultiModalDetectionService(IDetectionService):
             try:
                 result = self.detect_single_modality(modality, feats)
                 individual_results[modality] = PredictionResult(**result)
-            except Exception as e:
-                logger.error("Detection failed for %s: %s", modality, e)
+            except Exception:
+                pass
 
         if not individual_results:
             raise RuntimeError("All modality detections failed")

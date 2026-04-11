@@ -8,7 +8,6 @@ optional ``DLDetector`` where applicable.
 from __future__ import annotations
 
 import hashlib
-import logging
 import sys
 import warnings
 from pathlib import Path
@@ -37,8 +36,6 @@ except ImportError:  # pragma: no cover
     HANDWRITING_FEATURE_NAMES = [f"hw_{i}" for i in range(10)]
     GAIT_FEATURE_NAMES = [f"gait_{i}" for i in range(10)]
 
-logger = logging.getLogger(__name__)
-
 detect_bp = Blueprint('detect', __name__)
 
 _model_manager = None
@@ -64,11 +61,9 @@ def get_dl_detector():
         if DLDetector.is_available():
             _dl_detector = DLDetector()
             _dl_detector.load()
-            logger.info("DL detector loaded successfully.")
             return _dl_detector
-        logger.info("Advanced AI model not found; will use machine learning fallback.")
-    except Exception as e:
-        logger.warning("Could not load DL detector: %s", e)
+    except Exception:
+        pass
 
     return None
 
@@ -332,7 +327,6 @@ def run_detection():
                     'success': False
                 }), 400
             speech_features = np.array(speech)
-            logger.info("Speech features provided: %d", len(speech))
         
         # Validate and extract handwriting features
         if 'handwriting_features' in data and data['handwriting_features']:
@@ -343,7 +337,6 @@ def run_detection():
                     'success': False
                 }), 400
             handwriting_features = np.array(handwriting)
-            logger.info("Handwriting features provided: %d", len(handwriting))
         
         # Validate and extract gait features
         if 'gait_features' in data and data['gait_features']:
@@ -354,7 +347,6 @@ def run_detection():
                     'success': False
                 }), 400
             gait_features = np.array(gait)
-            logger.info("Gait features provided: %d", len(gait))
         
         # Check if at least one modality is provided
         if speech_features is None and handwriting_features is None and gait_features is None:
@@ -386,13 +378,6 @@ def run_detection():
             reference_class=sample_category,
         )
 
-        logger.info(
-            "Detection completed label=%s confidence=%.3f modalities=%d",
-            result["prediction_label"],
-            result["confidence"],
-            len(modalities_used),
-        )
-        
         # Save result to database if user is authenticated
         try:
             if hasattr(g, 'current_user') and g.current_user:
@@ -410,14 +395,13 @@ def run_detection():
                         'model_type': 'filename_logic'
                     }
                 )
-        except Exception as e:
-            logger.warning("Failed to save detection to database: %s", e)
+        except Exception:
             # Don't fail the request if save fails
+            pass
         
         return jsonify(result)
 
     except Exception as e:
-        logger.exception("Detection failed")
         return jsonify({
             'error': str(e),
             'success': False

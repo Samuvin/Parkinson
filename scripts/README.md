@@ -20,7 +20,6 @@ Use these from **bash** (macOS/Linux terminal, **VS Code integrated terminal** w
 | Command | What happens |
 |--------|----------------|
 | `./scripts/run_app.sh` | Creates `venv/` if missing, activates it, installs `requirements.txt` + `requirements-ml.txt`, then runs **`python wsgi.py`** (same end result as a manual venv + wsgi, with deps refreshed). |
-| `./scripts/run_notebook.sh` | Same venv setup, installs `requirements.txt` + `requirements-ml.txt` + `requirements-notebooks.txt`, then starts **Jupyter Notebook** opening `notebooks/parkinson_multimodal_staff_demo.ipynb`. |
 | `./scripts/train_model.sh` | Same venv setup with ML deps, then runs **`python train_dl.py`**, forwarding any extra arguments (e.g. `./scripts/train_model.sh --epochs 50 --device cuda`). |
 
 ---
@@ -31,7 +30,7 @@ Use these from **bash** (macOS/Linux terminal, **VS Code integrated terminal** w
 |--------|----------------|
 | `python scripts/train_voice_pipeline.py` | With **no flags**, prints a short message and reminds you to use `train_dl.py`; it does not download by default. |
 | `python scripts/train_voice_pipeline.py --download-speech` | Downloads fixed public **speech CSVs** (HTTPS URLs baked into the script) into `data/raw/speech/` (same idea as the bash downloader below). |
-| `python scripts/generate_example_speech_wavs.py` | Writes **short synthetic** WAV files under `data/examples/speech/` for notebooks and smoke tests—not real patient audio. |
+| `python scripts/generate_example_speech_wavs.py` | Writes **short synthetic** WAV files under `data/examples/speech/` for pipeline smoke tests—not real patient audio. |
 | `python scripts/build_handwriting_gait_from_public_sources.py` | Downloads/builds **handwriting** and **gait** tabular CSVs from fixed public sources (PaHaW-derived data, PhysioNet gaitpdb) into paths compatible with multimodal training; uses argparse (e.g. `--n-rows`) to align row counts with your speech CSV. |
 | `python scripts/uci_spiral_traces_to_csv.py` | Reads **UCI 395** spiral trace text files (after you unpack them) and writes a summary CSV; optional flags approximate project handwriting column names for exploration—it is **not** a drop-in replacement for the main `handwriting_data.csv` pipeline. |
 
