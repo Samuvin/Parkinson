@@ -54,19 +54,6 @@ htmlcov/
 .tox/
 .nox/
 
-# Data
-# Ignore processed/generated data (can be recreated)
-data/processed/
-data/raw/gait/*.csv
-# Large raw downloads (regenerate via data/raw/*/download_*_sources.sh)
-data/raw/handwriting/uci_spiral/
-data/raw/handwriting/kaggle_spiral/
-data/raw/gait/kaggle_mirror/
-
-# Allow speech dataset to be committed (needed for Docker builds)
-!data/raw/speech/parkinsons.csv
-!data/raw/speech/parkinsons_telemonitoring.csv
-
 # Voice pipeline reports (regenerate: python scripts/train_voice_pipeline.py)
 reports/voice_metrics.json
 reports/voice_test_predictions.npz
