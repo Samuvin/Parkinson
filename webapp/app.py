@@ -85,28 +85,10 @@ def create_app(config_path=None):
         """Detection page."""
         return render_template('detect.html')
 
-    @app.route('/about')
-    def about():
-        """About page."""
-        return render_template('about.html')
-
     @app.route('/results')
     def results():
         """Results page."""
         return render_template('results.html')
-
-    @app.route('/model-report')
-    def model_report():
-        """Training metrics, config feature lists, and plot links (same data as /api/training_report)."""
-        report = load_training_report(project_root)
-        return render_template('model_report.html', report=report)
-
-    @app.route('/model_images/<path:filename>')
-    def model_images(filename):
-        """Serve model performance images."""
-        from flask import send_from_directory
-        models_dir = os.path.join(app.root_path, '..', 'models')
-        return send_from_directory(models_dir, filename)
 
     # Error handlers
     @app.errorhandler(404)
