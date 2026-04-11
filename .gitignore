@@ -57,7 +57,6 @@ htmlcov/
 # Data
 # Ignore processed/generated data (can be recreated)
 data/processed/
-data/raw/handwriting/*.csv
 data/raw/gait/*.csv
 # Large raw downloads (regenerate via data/raw/*/download_*_sources.sh)
 data/raw/handwriting/uci_spiral/
