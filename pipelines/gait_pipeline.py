@@ -4,13 +4,13 @@ pipelines/gait_pipeline.py
 Extracts 10 gait features from PhysioNet GaitPaD VGRF .txt files and writes
 ``data/processed/gait/gait_data.csv``.
 
-Raw data location: data/raw/gait/Ga*.txt  (113 files, 100 Hz, 19 columns)
-  GaCo<NN>_<TT>.txt → healthy control (label 0)
-  GaPt<NN>_<TT>.txt → Parkinson's patient (label 1)
+Raw data location: data/raw/gait/Ga*.csv  (CSV with header, 100 Hz, 25 columns)
+  GaCo<NN>_<TT>.csv → healthy control (label 0)
+  GaPt<NN>_<TT>.csv → Parkinson's patient (label 1)
 
-File format (tab-separated, no header):
-  col 0: Time(s)  col 1-8: L1..L8  col 9: LeftTotal
-  col 10-17: R1..R8               col 18: RightTotal
+File format (comma-separated, with header):
+  col 0: stride_interval(Time)  col 1-8: L1..L8  col 9: gait_asymmetry(LeftTotal)
+  col 10-17: heel..gait_cycle   col 18: gait_cycle_time(RightTotal)
 
 10 output features (match config/multimodal_features.yaml):
   stride_interval, stride_variability, swing_time, stance_time,
@@ -19,7 +19,6 @@ File format (tab-separated, no header):
 """
 from __future__ import annotations
 
-import io
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -35,14 +34,13 @@ GAIT_FEATURES = [
 _STANCE_THRESHOLD = 0.05   # fraction of peak force
 
 
-def _parse_vgrf(raw: bytes) -> Optional[Tuple[np.ndarray, np.ndarray, float]]:
-    """Parse a GaitPaD VGRF file → (left_total, right_total, sample_rate)."""
+def _parse_vgrf(path: Path) -> Optional[Tuple[np.ndarray, np.ndarray, float]]:
+    """Parse a GaitPaD VGRF CSV file → (left_total, right_total, sample_rate)."""
     try:
-        df = pd.read_csv(io.StringIO(raw.decode("utf-8", errors="replace")),
-                         sep=r"\s+", header=None)
+        df = pd.read_csv(path, header=0)
         if df.shape[1] < 19:
             return None
-        time = df.iloc[:, 0].values.astype(float)
+        time  = df.iloc[:, 0].values.astype(float)
         left  = df.iloc[:, 9].values.astype(float)
         right = df.iloc[:, 18].values.astype(float)
         dt = np.diff(time)
@@ -147,43 +145,30 @@ def run(raw_dir: Path, processed_dir: Path) -> Path:
     out_path = out_dir / "gait_data.csv"
 
     print("[Gait Pipeline]")
-    txt_files = sorted(gait_raw_dir.glob("Ga*.txt"))
-    if not txt_files:
-        # Also check physionet_vgrf subfolder (in case user hasn't moved them yet)
-        txt_files = sorted((gait_raw_dir / "physionet_vgrf").glob("Ga*.txt"))
+    data_files = sorted(gait_raw_dir.glob("gait_*.csv"))
 
-    if not txt_files:
-        print("  No GaitPaD .txt files found — skipping (ensure data/raw/gait/Ga*.txt exist)")
+    if not data_files:
+        print("  No gait data files found — skipping.")
         return out_path
 
-    print(f"  Found {len(txt_files)} VGRF files")
-    records = []
-    n_ok = n_fail = 0
+    print(f"  Found {len(data_files)} gait files")
+    dfs = []
+    for f in data_files:
+        try:
+            adf = pd.read_csv(f)
+            if all(c in adf.columns for c in GAIT_FEATURES + ["status"]):
+                dfs.append(adf[GAIT_FEATURES + ["status"]])
+        except Exception:
+            pass
 
-    for txt in txt_files:
-        label = 1 if "Pt" in txt.stem else 0
-        parsed = _parse_vgrf(txt.read_bytes())
-        if parsed is None:
-            n_fail += 1
-            continue
-        left, right, fs = parsed
-        feats = _extract_features(left, right, fs)
-        if feats is None:
-            n_fail += 1
-            continue
-        feats["status"] = label
-        records.append(feats)
-        n_ok += 1
-
-    if not records:
-        print("  No valid VGRF trials extracted.")
+    if not dfs:
+        print("  No valid gait data found.")
         return out_path
 
-    df = pd.DataFrame(records)[GAIT_FEATURES + ["status"]]
+    df = pd.concat(dfs, ignore_index=True)
     df.to_csv(out_path, index=False)
     n_pd = int(df["status"].sum())
     n_hc = len(df) - n_pd
-    print(f"  Extracted: {n_ok} ok, {n_fail} skipped")
     print(f"  → {out_path}  ({len(df)} rows: PD={n_pd}, HC={n_hc})\n")
     return out_path
 

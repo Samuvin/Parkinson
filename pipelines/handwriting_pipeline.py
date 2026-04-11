@@ -112,56 +112,30 @@ def run(raw_dir: Path, processed_dir: Path) -> Path:
 
     print("[Handwriting Pipeline]")
 
-    # Use all task files (tasks 1-8) for every subject — excludes Jupyter
-    # checkpoint artefacts (*-checkpoint.csv).
-    all_task_files = sorted(
-        f for f in hw_raw_dir.glob("*__*_1.csv")
-        if "checkpoint" not in f.name
-    )
+    data_files = sorted(hw_raw_dir.glob("handwriting_*.csv"))
 
-    if not all_task_files:
-        print("  No PaHaW CSV files found. Ensure data/raw/handwriting/000XX__N_1.csv exist.")
+    if not data_files:
+        print("  No handwriting data files found — skipping.")
         return out_path
 
-    print(f"  Using all tasks: {len(all_task_files)} files")
+    print(f"  Found {len(data_files)} handwriting files")
+    dfs = []
+    for f in data_files:
+        try:
+            adf = pd.read_csv(f)
+            if all(c in adf.columns for c in HW_FEATURES + ["status"]):
+                dfs.append(adf[HW_FEATURES + ["status"]])
+        except Exception:
+            pass
 
-    records = []
-    n_ok = n_fail = 0
-
-    for f in all_task_files:
-        row = _load_pahaw_file(f)
-        if row is None or row[HW_FEATURES].isna().all():
-            n_fail += 1
-            continue
-        records.append(row)
-        n_ok += 1
-
-    if not records:
-        print("  No valid handwriting records extracted.")
+    if not dfs:
+        print("  No valid handwriting data found.")
         return out_path
 
-    df = pd.DataFrame(records)
-
-    # Fill any remaining NaNs with column medians
-    for col in HW_FEATURES:
-        if col in df.columns:
-            df[col] = df[col].fillna(df[col].median())
-
-    df = df.dropna(subset=HW_FEATURES)
-    df["status"] = df["status"].fillna(df["status"].median()).astype(int)
-
-    # Clip extreme outliers (> 99.9th / < 0.1th percentile)
-    for col in HW_FEATURES:
-        cap   = df[col].quantile(0.999)
-        floor = df[col].quantile(0.001)
-        df[col] = df[col].clip(lower=floor, upper=cap)
-
-    df = df[HW_FEATURES + ["status"]].reset_index(drop=True)
+    df = pd.concat(dfs, ignore_index=True)
     df.to_csv(out_path, index=False)
-
     n_pd = int(df["status"].sum())
     n_hc = len(df) - n_pd
-    print(f"  Extracted: {n_ok} ok, {n_fail} skipped")
     print(f"  → {out_path}  ({len(df)} rows: PD={n_pd}, HC={n_hc})\n")
     return out_path
 
