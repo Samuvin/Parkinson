@@ -1061,27 +1061,6 @@ ul li{color:var(--text-2)}
     border-color:var(--success);background:var(--success);color:#fff;
 }
 
-/* =================================================================
-   Recording Animation
-   ================================================================= */
-.recording-wave{
-    display:flex;align-items:center;justify-content:center;gap:3px;
-    height:32px;
-}
-.recording-wave .bar{
-    width:3px;border-radius:2px;
-    background:linear-gradient(180deg,var(--danger),var(--warning));
-    animation:waveBar 1.2s ease-in-out infinite;
-}
-.recording-wave .bar:nth-child(1){height:8px;animation-delay:0s}
-.recording-wave .bar:nth-child(2){height:16px;animation-delay:.1s}
-.recording-wave .bar:nth-child(3){height:24px;animation-delay:.2s}
-.recording-wave .bar:nth-child(4){height:16px;animation-delay:.3s}
-.recording-wave .bar:nth-child(5){height:8px;animation-delay:.4s}
-@keyframes waveBar{
-    0%,100%{transform:scaleY(.4)}
-    50%{transform:scaleY(1)}
-}
 
 /* =================================================================
    DL Explainability Visualizations

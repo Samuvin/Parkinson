@@ -11,10 +11,6 @@
  *  7. Unified showNotification (falls through to main.js).
  */
 
-let mediaRecorder;
-let audioChunks = [];
-let isRecording = false;
-
 let extractedFeatures = {
     speech: null,
     handwriting: null,
@@ -164,11 +160,6 @@ $(document).ready(function () {
     }
 
     // ---- Event Bindings ----
-
-    // Voice recording
-    $('#recordBtn').click(function () {
-        if (!isRecording) startRecording(); else stopRecording();
-    });
 
     // Upload buttons
     $('#uploadAudioBtn').click(function () { uploadAudioFile(); });
@@ -832,54 +823,13 @@ $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
     if (newTab !== currentActiveTab) {
         currentActiveTab = newTab;
         // Only stop recording if switching away from speech tab
-        if (isRecording && newTab !== 'speech') {
-            stopRecording();
-        }
+        // (recording removed)
     }
     
     // Update steps based on actual progress, not just tab selection
     updateStepsBasedOnProgress();
     
 });
-
-/* ------------------------------------------------------------------ */
-/*  Voice Recording                                                    */
-/* ------------------------------------------------------------------ */
-
-async function startRecording() {
-    try {
-        var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-
-        mediaRecorder.ondataavailable = function (event) { audioChunks.push(event.data); };
-        mediaRecorder.onstop = function () {
-            var audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-            uploadRecordedAudio(audioBlob);
-            stream.getTracks().forEach(function (t) { t.stop(); });
-        };
-
-        mediaRecorder.start();
-        isRecording = true;
-        $('#recordBtn').removeClass('btn-danger').addClass('btn-warning');
-        $('#recordBtnText').text('Stop Recording');
-        $('#recordingStatus').show();
-    } catch (error) {
-        console.error('Microphone error:', error);
-        showNotification('Could not access microphone. Check permissions.', 'danger');
-    }
-}
-
-function stopRecording() {
-    if (mediaRecorder && isRecording) {
-        mediaRecorder.stop();
-        isRecording = false;
-        $('#recordBtn').removeClass('btn-warning').addClass('btn-danger');
-        $('#recordBtnText').text('Start Recording');
-        $('#recordingStatus').hide();
-        showNotification('Recording stopped. Processing audio...', 'success');
-    }
-}
 
 /* ------------------------------------------------------------------ */
 /*  Upload Functions                                                   */
@@ -1927,9 +1877,6 @@ function resetFormOnTabSwitch() {
     updateUploadZoneState('combinedSpeechDropZone', 'empty');
     updateUploadZoneState('combinedHandwritingDropZone', 'empty');
     updateUploadZoneState('combinedGaitDropZone', 'empty');
-
-    // Stop any ongoing recording
-    if (isRecording) stopRecording();
 
     // Clear hidden inputs
     $('#speechFeatures').val('');
