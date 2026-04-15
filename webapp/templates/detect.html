@@ -688,8 +688,14 @@
                         <p id="detectionText" class="small mb-0" style="max-width:440px;margin:0 auto"></p>
                     </div>
 
+                    <!-- Severity Badge (Parkinson's only) -->
+                    <div id="severitySection" class="text-center mb-4" style="display:none">
+                        <small class="fw-bold d-block mb-2" style="color:var(--text-1)">Severity</small>
+                        <span id="severityBadge" style="font-size:1.1rem;font-weight:700;padding:.4rem 1.2rem;border-radius:2rem;display:inline-block"></span>
+                    </div>
+
                     <!-- Confidence Ring -->
-                    <div class="text-center mb-4">
+                    <div id="confidenceRingSection" class="text-center mb-4" style="display:none">
                         <div class="metric-ring" style="width:140px;height:140px;margin:0 auto">
                             <svg width="140" height="140" viewBox="0 0 140 140">
                                 <circle class="ring-track" cx="70" cy="70" r="60"/>
@@ -714,7 +720,7 @@
                             </div>
 
                             <!-- Probability Bars -->
-                            <div class="mb-3">
+                            <div id="probabilitySection" class="mb-3" style="display:none">
                                 <small class="fw-bold d-block mb-2" style="color:var(--text-1)">Probability</small>
                                 <div class="d-flex align-items-center gap-2 mb-2">
                                     <small style="width:80px;color:var(--success)"><i class="fas fa-check-circle"></i> Healthy</small>

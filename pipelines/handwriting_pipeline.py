@@ -13,16 +13,16 @@ that match ``config/multimodal_features.yaml``:
 
   Feature name          PaHaW source column(s)
   ──────────────────────────────────────────────────────────────────────────
-  tremor_power          pressure_variance
-  spiral_irregularity   azimuth_variance            (pen-angle rotation spread)
+  stroke_width_variance pressure_variance           (coeff. of variation of stroke widths)
+  edge_roughness        azimuth_variance            (ink contour / convex-hull perimeter ratio)
   stroke_smoothness     1 / (1 + velocity_variance) (inverted velocity jitter)
   contour_complexity    displacement_variance
-  tremor_frequency      pressure_Number_of_changing_point
-  pen_up_ratio          ratio_of_in_air_time
-  mean_stroke_width     displacement_mean
-  drawing_speed_proxy   velocity_mean
+  stroke_inflection_count  pressure_Number_of_changing_point
+  fragment_ratio        ratio_of_in_air_time        (normalised fragment count proxy)
+  stroke_width_mean     displacement_mean           (mean stroke width proxy)
+  ink_hull_ratio        velocity_mean
   line_waviness         y_variance                  (vertical-position spread)
-  fluency_score         velocity_mean / (velocity_standard_deviation + 1e-6)
+  ink_coverage          velocity_mean / (velocity_standard_deviation + 1e-6)  (coverage proxy)
   ──────────────────────────────────────────────────────────────────────────
 
 All 8 tasks are used (not just the spiral task) so that each subject
@@ -39,28 +39,28 @@ import numpy as np
 import pandas as pd
 
 HW_FEATURES = [
-    "tremor_power",
-    "spiral_irregularity",
+    "stroke_width_variance",
+    "edge_roughness",
     "stroke_smoothness",
     "contour_complexity",
-    "tremor_frequency",
-    "pen_up_ratio",
-    "mean_stroke_width",
-    "drawing_speed_proxy",
+    "stroke_inflection_count",
+    "fragment_ratio",
+    "stroke_width_mean",
+    "ink_hull_ratio",
     "line_waviness",
-    "fluency_score",
+    "ink_coverage",
 ]
 
 # Direct PaHaW column → target feature name.
-# stroke_smoothness and fluency_score are computed from velocity columns.
+# stroke_smoothness and ink_coverage are computed from velocity columns.
 _PAHAW_MAP = {
-    "pressure_variance":               "tremor_power",
-    "azimuth_variance":                "spiral_irregularity",
+    "pressure_variance":               "stroke_width_variance",
+    "azimuth_variance":                "edge_roughness",
     "displacement_variance":           "contour_complexity",
-    "pressure_Number_of_changing_point": "tremor_frequency",
-    "ratio_of_in_air_time":            "pen_up_ratio",
-    "displacement_mean":               "mean_stroke_width",
-    "velocity_mean":                   "drawing_speed_proxy",
+    "pressure_Number_of_changing_point": "stroke_inflection_count",
+    "ratio_of_in_air_time":            "fragment_ratio",
+    "displacement_mean":               "stroke_width_mean",
+    "velocity_mean":                   "ink_hull_ratio",
     "y_variance":                      "line_waviness",
 }
 
@@ -88,13 +88,13 @@ def _load_pahaw_file(path: Path) -> Optional[pd.Series]:
     out["stroke_smoothness"] = (1.0 / (1.0 + float(vel_var))
                                 if pd.notna(vel_var) else np.nan)
 
-    # fluency_score = velocity_mean / (velocity_standard_deviation + 1e-6)
+    # ink_coverage = velocity_mean / (velocity_standard_deviation + 1e-6)
     vel_mean = pd.to_numeric(row.get("velocity_mean",                np.nan), errors="coerce")
     vel_std  = pd.to_numeric(row.get("velocity_standard_deviation",  np.nan), errors="coerce")
     if pd.notna(vel_mean) and pd.notna(vel_std):
-        out["fluency_score"] = float(vel_mean) / (float(vel_std) + 1e-6)
+        out["ink_coverage"] = float(vel_mean) / (float(vel_std) + 1e-6)
     else:
-        out["fluency_score"] = np.nan
+        out["ink_coverage"] = np.nan
 
     # label
     label_val = pd.to_numeric(row.get("label", np.nan), errors="coerce")

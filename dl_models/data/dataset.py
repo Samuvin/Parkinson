@@ -37,10 +37,10 @@ def _embedded_default_spec() -> dict[str, Any]:
             "NHR", "HNR", "RPDE", "DFA", "spread1", "spread2", "D2", "PPE",
         ],
         "handwriting_features": [
-            "tremor_power", "spiral_irregularity", "stroke_smoothness",
-            "contour_complexity", "tremor_frequency", "pen_up_ratio",
-            "mean_stroke_width", "drawing_speed_proxy", "line_waviness",
-            "fluency_score",
+            "stroke_width_variance", "edge_roughness", "stroke_smoothness",
+            "contour_complexity", "stroke_inflection_count", "fragment_ratio",
+            "stroke_width_mean", "ink_hull_ratio", "line_waviness",
+            "ink_coverage",
         ],
         "gait_features": [
             "stride_interval", "stride_variability", "swing_time",

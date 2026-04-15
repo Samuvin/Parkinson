@@ -1,4 +1,4 @@
-tremor_power,spiral_irregularity,stroke_smoothness,contour_complexity,tremor_frequency,pen_up_ratio,mean_stroke_width,drawing_speed_proxy,line_waviness,fluency_score,status
+stroke_width_variance,edge_roughness,stroke_smoothness,contour_complexity,stroke_inflection_count,fragment_ratio,stroke_width_mean,ink_hull_ratio,line_waviness,ink_coverage,status
 250830.752,-1453.6586,0.6994,425.622,347.7559,0.3865,6.51,0.7158,2504.2518,1.0893,0
 16919.9717,5675.0786,0.9411,-5.1764,1178.3259,0.0001,5.1505,0.6872,97917.7329,2.8038,0
 302214.232,-1822.7196,0.6784,253.1414,883.5711,0.3112,5.5472,0.677,6259.9408,0.9786,0

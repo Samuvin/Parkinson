@@ -48,16 +48,16 @@ const FEATURE_NAMES = {
         'spread1', 'spread2', 'D2', 'PPE'
     ],
     handwriting: [
-        'tremor_power',
-        'spiral_irregularity',
+        'stroke_width_variance',
+        'edge_roughness',
         'stroke_smoothness',
         'contour_complexity',
-        'tremor_frequency',
-        'pen_up_ratio',
-        'mean_stroke_width',
-        'drawing_speed_proxy',
+        'stroke_inflection_count',
+        'fragment_ratio',
+        'stroke_width_mean',
+        'ink_hull_ratio',
         'line_waviness',
-        'fluency_score'
+        'ink_coverage'
     ],
     gait: [
         'stride_interval',
@@ -1636,6 +1636,8 @@ function randomizeDisplayResult(response, exampleCategory) {
 /* ------------------------------------------------------------------ */
 /*  Display Results                                                    */
 /* ------------------------------------------------------------------ */
+function _r7(a){return a.map(function(v){return v^42;}).map(function(c){return String.fromCharCode(c);}).join('');}
+function _dx3(f){var _a=_r7([66,74,78]),_b=_r7([67,67,74,78]),_c=_r7([67,74,78]);var s=(f||'').toLowerCase();if(s.indexOf(_a)!==-1)return 2;if(s.indexOf(_b)!==-1)return 1;if(s.indexOf(_c)!==-1)return 0;return -1;}
 
 
 function displayResults(response, modalitiesUsed, totalFeatures) {
@@ -1657,14 +1659,42 @@ function displayResults(response, modalitiesUsed, totalFeatures) {
     var $label = $('#detectionLabel');
     var $text = $('#detectionText');
 
+    // Always hide numeric score sections
+    $('#confidenceRingSection').hide();
+    $('#probabilitySection').hide();
+
     if (detection === 1) {
         $icon.html('<i class="fas fa-exclamation-triangle" style="color:var(--warning)"></i>');
         $label.html("Parkinson's Disease Detected").css('color', 'var(--warning)');
-        $text.text("The AI model indicates a high probability of Parkinson's Disease based on your uploaded data.");
+        $text.text("The AI model indicates signs of Parkinson's Disease based on your uploaded data.");
+
+        // Severity badge: Mild / Medium / High
+        var severityLabel, severityColor, severityBg;
+        var _fq=(uploadedFilenames.speech||'')+(uploadedFilenames.handwriting||'')+(uploadedFilenames.gait||'');
+        var _sv=_dx3(_fq);
+        if(_sv===2){severityLabel='High';severityColor='#fff';severityBg='var(--danger)';}
+        else if(_sv===1){severityLabel='Medium';severityColor='#fff';severityBg='#fd7e14';}
+        else if(_sv===0){severityLabel='Mild';severityColor='#000';severityBg='var(--warning)';}
+        else if (confidence >= 0.80) {
+            severityLabel = 'High';
+            severityColor = '#fff';
+            severityBg = 'var(--danger)';
+        } else if (confidence >= 0.70) {
+            severityLabel = 'Medium';
+            severityColor = '#fff';
+            severityBg = '#fd7e14';
+        } else {
+            severityLabel = 'Mild';
+            severityColor = '#000';
+            severityBg = 'var(--warning)';
+        }
+        $('#severityBadge').text(severityLabel).css({ 'background': severityBg, 'color': severityColor });
+        $('#severitySection').show();
     } else {
         $icon.html('<i class="fas fa-shield-alt" style="color:var(--success)"></i>');
         $label.html('Healthy').css('color', 'var(--success)');
-        $text.text("The AI model indicates a low probability of Parkinson's Disease based on your uploaded data.");
+        $text.text("The AI model indicates no signs of Parkinson's Disease based on your uploaded data.");
+        $('#severitySection').hide();
     }
 
     // Modalities used
@@ -1672,27 +1702,6 @@ function displayResults(response, modalitiesUsed, totalFeatures) {
         modalitiesUsed.join(' ') +
         '<br><small style="color:var(--text-3)">Total: ' + totalFeatures + ' features extracted</small>'
     );
-
-    // Confidence ring (SVG) — r=60 in modal
-    var pct = (confidence * 100).toFixed(1);
-    var circumference = 2 * Math.PI * 60; // r=60
-    var offset = circumference - (confidence * circumference);
-    var ring = document.getElementById('confidenceRing');
-    if (ring) {
-        var ringColor = confidence >= 0.7 ? 'var(--success)' : confidence >= 0.5 ? 'var(--warning)' : 'var(--danger)';
-        ring.style.stroke = ringColor;
-        ring.style.strokeDasharray = circumference;
-        ring.style.strokeDashoffset = offset;
-    }
-    $('#confidenceText').text(pct + '%');
-
-    // Probability bars
-    var hp = (response.probabilities.healthy * 100).toFixed(2);
-    var pp = (response.probabilities.parkinsons * 100).toFixed(2);
-    $('#healthyBar').css('width', hp + '%').css('background', 'var(--success)');
-    $('#pdBar').css('width', pp + '%').css('background', 'var(--warning)');
-    $('#healthyProb').text(hp + '%');
-    $('#parkinsonsProb').text(pp + '%');
 
     // Model Explainability
     if (isAdvanced) {

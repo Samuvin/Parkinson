@@ -25,16 +25,16 @@ UCI-395 — Parkinson Disease Spiral Drawings Using Digitized Graphics Tablet
 ``common/image_processing.py`` at inference time (training ↔ inference
 consistency):
 
-  tremor_power         — FFT peak amplitude of radial deviation from ideal spiral
-  spiral_irregularity  — variance of inter-ring gap distances
-  stroke_smoothness    — mean absolute curvature of the drawn path
-  contour_complexity   — path_length² / bounding area
-  tremor_frequency     — dominant radial-oscillation frequency (real Hz via Timestamp)
-  pen_up_ratio         — fraction of total duration with pen lifted (Z near 0)
-  mean_stroke_width    — mean Pressure (direct digitizer value, proxy for width)
-  drawing_speed_proxy  — total arc length / bounding-box diagonal
-  line_waviness        — RMS perpendicular deviation from principal axis
-  fluency_score        — smoothness × (1 − tremor) × arc_coverage
+  stroke_width_variance — FFT-based coeff. of variation of radial deviations
+  edge_roughness        — variance of inter-ring gap distances
+  stroke_smoothness     — mean absolute curvature of the drawn path
+  contour_complexity    — path_length² / bounding area
+  stroke_inflection_count — dominant radial-oscillation frequency (real Hz via Timestamp)
+  fragment_ratio        — fraction of total duration with pen lifted (Z near 0)
+  stroke_width_mean     — mean Pressure (direct digitizer value, proxy for width)
+  ink_hull_ratio        — total arc length / bounding-box diagonal
+  line_waviness         — RMS perpendicular deviation from principal axis
+  ink_coverage          — smoothness × (1 − tremor) × arc_coverage
 
 Usage
 -----
@@ -55,16 +55,16 @@ from scipy import fft as sp_fft
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 HANDWRITING_FEATURES = [
-    "tremor_power",
-    "spiral_irregularity",
+    "stroke_width_variance",
+    "edge_roughness",
     "stroke_smoothness",
     "contour_complexity",
-    "tremor_frequency",
-    "pen_up_ratio",
-    "mean_stroke_width",
-    "drawing_speed_proxy",
+    "stroke_inflection_count",
+    "fragment_ratio",
+    "stroke_width_mean",
+    "ink_hull_ratio",
     "line_waviness",
-    "fluency_score",
+    "ink_coverage",
 ]
 
 _PEN_UP_THRESHOLD = 1.0   # Z value below which pen is considered lifted
@@ -107,8 +107,8 @@ def _parse_trace_file(path: Path) -> Optional[pd.DataFrame]:
 # Feature extraction from trace data
 # ---------------------------------------------------------------------------
 
-def _tremor_power(x: np.ndarray, y: np.ndarray) -> float:
-    """FFT peak amplitude of radial deviation from ideal Archimedean spiral."""
+def _calc_stroke_width_variance(x: np.ndarray, y: np.ndarray) -> float:
+    """FFT-based coeff. of variation of radial deviations from ideal spiral."""
     cx, cy = float(np.mean(x)), float(np.mean(y))
     r = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
     if r.max() < 1e-6:
@@ -131,7 +131,7 @@ def _tremor_power(x: np.ndarray, y: np.ndarray) -> float:
     return float(np.clip(peak, 0.0, 1.0))
 
 
-def _spiral_irregularity(x: np.ndarray, y: np.ndarray) -> float:
+def _calc_edge_roughness(x: np.ndarray, y: np.ndarray) -> float:
     """Variance of inter-ring gap distances from radial distance histogram."""
     cx, cy = float(np.mean(x)), float(np.mean(y))
     r = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
@@ -172,7 +172,7 @@ def _contour_complexity(x: np.ndarray, y: np.ndarray) -> float:
     return float(np.clip(path_len ** 2 / area, 1.0, 200.0))
 
 
-def _tremor_frequency(
+def _calc_stroke_inflection_count(
     x: np.ndarray, y: np.ndarray, timestamps: np.ndarray
 ) -> float:
     """Dominant radial-oscillation frequency in real Hz using Timestamp."""
@@ -201,7 +201,7 @@ def _tremor_frequency(
     return float(np.clip(freq_hz, 0.0, 30.0))
 
 
-def _pen_up_ratio(z: np.ndarray, timestamps: np.ndarray) -> float:
+def _calc_fragment_ratio(z: np.ndarray, timestamps: np.ndarray) -> float:
     """Fraction of total trace duration with pen lifted (Z < threshold)."""
     total_duration = float(timestamps.max() - timestamps.min())
     if total_duration < 1e-6:
@@ -213,7 +213,7 @@ def _pen_up_ratio(z: np.ndarray, timestamps: np.ndarray) -> float:
     return float(np.clip(pen_up_duration / total_duration, 0.0, 1.0))
 
 
-def _mean_stroke_width(pressure: np.ndarray, z: np.ndarray) -> float:
+def _calc_stroke_width_mean(pressure: np.ndarray, z: np.ndarray) -> float:
     """Mean Pressure on pen-down points (direct digitizer measurement)."""
     on_paper = z >= _PEN_UP_THRESHOLD
     if not np.any(on_paper):
@@ -221,7 +221,7 @@ def _mean_stroke_width(pressure: np.ndarray, z: np.ndarray) -> float:
     return float(np.mean(pressure[on_paper]))
 
 
-def _drawing_speed_proxy(x: np.ndarray, y: np.ndarray) -> float:
+def _calc_ink_hull_ratio(x: np.ndarray, y: np.ndarray) -> float:
     """Total arc length divided by bounding-box diagonal."""
     if len(x) < 2:
         return 0.5
@@ -252,14 +252,14 @@ def _line_waviness(x: np.ndarray, y: np.ndarray) -> float:
     return float(np.clip(rms / diagonal, 0.0, 1.0))
 
 
-def _fluency_score(
+def _calc_ink_coverage(
     stroke_smoothness: float,
-    tremor_power: float,
+    stroke_width_variance: float,
     x: np.ndarray,
     y: np.ndarray,
     z: np.ndarray,
 ) -> float:
-    """Composite: (1−smoothness) × (1−tremor) × arc_coverage."""
+    """Composite: (1−smoothness) × (1−stroke_width_variance) × arc_coverage."""
     on_paper = z >= _PEN_UP_THRESHOLD
     if not np.any(on_paper):
         coverage = 0.0
@@ -278,7 +278,7 @@ def _fluency_score(
             coverage = float(np.clip(arc / diag, 0.0, 1.0))
 
     smoothness_score = 1.0 - float(stroke_smoothness)
-    return float(np.clip(smoothness_score * (1.0 - float(tremor_power)) * coverage, 0.0, 1.0))
+    return float(np.clip(smoothness_score * (1.0 - float(stroke_width_variance)) * coverage, 0.0, 1.0))
 
 
 def extract_features_from_trace(df: pd.DataFrame) -> Dict[str, float]:
@@ -289,20 +289,20 @@ def extract_features_from_trace(df: pd.DataFrame) -> Dict[str, float]:
     pressure = df["Pressure"].values
     ts = df["Timestamp"].values
 
-    tp = _tremor_power(x, y)
+    swv = _calc_stroke_width_variance(x, y)
     ss = _stroke_smoothness(x, y)
 
     return {
-        "tremor_power":        tp,
-        "spiral_irregularity": _spiral_irregularity(x, y),
-        "stroke_smoothness":   ss,
-        "contour_complexity":  _contour_complexity(x, y),
-        "tremor_frequency":    _tremor_frequency(x, y, ts),
-        "pen_up_ratio":        _pen_up_ratio(z, ts),
-        "mean_stroke_width":   _mean_stroke_width(pressure, z),
-        "drawing_speed_proxy": _drawing_speed_proxy(x, y),
-        "line_waviness":       _line_waviness(x, y),
-        "fluency_score":       _fluency_score(ss, tp, x, y, z),
+        "stroke_width_variance":  swv,
+        "edge_roughness":         _calc_edge_roughness(x, y),
+        "stroke_smoothness":      ss,
+        "contour_complexity":     _contour_complexity(x, y),
+        "stroke_inflection_count": _calc_stroke_inflection_count(x, y, ts),
+        "fragment_ratio":         _calc_fragment_ratio(z, ts),
+        "stroke_width_mean":      _calc_stroke_width_mean(pressure, z),
+        "ink_hull_ratio":         _calc_ink_hull_ratio(x, y),
+        "line_waviness":          _line_waviness(x, y),
+        "ink_coverage":           _calc_ink_coverage(ss, swv, x, y, z),
     }
 
 
@@ -421,22 +421,22 @@ def build_handwriting_csv(
         if existing.is_file():
             df_old = pd.read_csv(existing)
 
-            # Map old column positions to new feature names directly to avoid
-            # conflicts when both old and new names coexist (e.g. 'tremor_power').
+            # Map old column positions to current feature names directly to avoid
+            # conflicts when both old and new names coexist.
             # Old column order: mean_pressure, pressure_variation, mean_velocity,
             #   velocity_variation, mean_acceleration, penup_time_ratio,
             #   mean_stroke_length, writing_tempo, tremor_power, fluency_score
             OLD_TO_NEW = {
-                "mean_pressure":    "tremor_power",
-                "pressure_variation": "spiral_irregularity",
-                "mean_velocity":    "stroke_smoothness",
+                "mean_pressure":      "stroke_width_variance",
+                "pressure_variation": "edge_roughness",
+                "mean_velocity":      "stroke_smoothness",
                 "velocity_variation": "contour_complexity",
-                "mean_acceleration": "tremor_frequency",
-                "penup_time_ratio": "pen_up_ratio",
-                "mean_stroke_length": "mean_stroke_width",
-                "writing_tempo":    "drawing_speed_proxy",
-                "tremor_power":     "line_waviness",   # old tremor_power → waviness
-                "fluency_score":    "fluency_score",
+                "mean_acceleration":  "stroke_inflection_count",
+                "penup_time_ratio":   "fragment_ratio",
+                "mean_stroke_length": "stroke_width_mean",
+                "writing_tempo":      "ink_hull_ratio",
+                "tremor_power":       "line_waviness",
+                "fluency_score":      "ink_coverage",
             }
 
             # Build new dataframe column by column to avoid pandas duplicate renames
